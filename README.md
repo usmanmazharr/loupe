@@ -26,7 +26,11 @@ Loupe started as a network logger and grew into a full-spectrum runtime inspecto
 
 ---
 
-## Installation
+## Run on iOS
+
+### 1. Install via Swift Package Manager
+
+In Xcode: **File → Add Packages…** and paste the repo URL, or add it manually:
 
 ```swift
 // Package.swift
@@ -38,25 +42,19 @@ Loupe started as a network logger and grew into a full-spectrum runtime inspecto
 
 For Release builds, depend on `LoupeNoop` instead — same API surface, no captures, no UI, no cost.
 
----
+### 2. Start capturing
 
-## Quick start
+In your `AppDelegate` (or SwiftUI `App` init):
 
 ```swift
 import Loupe
 
-@main
-struct MyApp: App {
-    init() {
-        Loupe.shared.start()  // capture starts immediately
-    }
-    var body: some Scene { WindowGroup { ContentView() } }
-}
+Loupe.shared.start()
 ```
 
-That's it — every network call from this point on is captured.
+Every `URLSession` request from this point on is captured automatically.
 
-### Open the debug UI
+### 3. Open the debug UI
 
 ```swift
 // UIKit
@@ -66,28 +64,25 @@ LoupeViewController.present(from: self)
 .sheet(isPresented: $showLoupe) {
     LoupeView(isPresented: $showLoupe)
 }
-
-// Or shake your device — enabled by default in DEBUG.
 ```
 
-### Track analytics events
+Or just **shake the device** — enabled by default in DEBUG.
 
+### 4. Optional features
+
+Track analytics events (auto-attributed to the current screen):
 ```swift
 Loupe.shared.trackEvent("checkout_started",
                         provider: "Mixpanel",
                         properties: ["plan": "pro"])
 ```
 
-Events auto-attribute to the current screen (set via `Loupe.shared.setCurrentScreen(_:)`, the `.loupeScreen("Cart")` SwiftUI modifier, or auto-detected from `UIViewController.viewDidAppear`).
-
-### Mirror `OSLog` into the Console tab
-
+Mirror `OSLog` into the Console tab:
 ```swift
 Loupe.shared.startConsoleMirror(subsystems: ["com.myapp"])
 ```
 
-### Stub responses with the Mock Engine
-
+Stub responses with the Mock Engine:
 ```swift
 Loupe.shared.addMockRule(
     .init(urlPattern: ".*\\/users\\/me",
@@ -97,22 +92,43 @@ Loupe.shared.addMockRule(
 )
 ```
 
-### Stream to the macOS companion
+---
 
-In your iOS app:
+## Run on macOS (companion app)
+
+The macOS companion auto-discovers your iPhone over local Wi-Fi and streams everything live — network entries, console logs, analytics events.
+
+### 1. Build and launch the Mac app
+
+```bash
+git clone https://github.com/usmanmazharr/loupe.git
+cd loupe
+swift run LoupeMacApp
+```
+
+### 2. Enable remote logging on iOS
+
 ```swift
 var config = LoupeConfiguration()
 config.remoteLoggingEnabled = true
 Loupe.shared.start(with: config)
 ```
 
-Add `NSLocalNetworkUsageDescription` and `NSBonjourServices` (`_loupe._tcp`) to your `Info.plist`, then run the macOS app:
+### 3. Add Bonjour entries to your iOS app's `Info.plist`
 
-```bash
-swift run LoupeMacApp
+```xml
+<key>NSLocalNetworkUsageDescription</key>
+<string>Connect to the Loupe debugging app on your Mac.</string>
+
+<key>NSBonjourServices</key>
+<array>
+    <string>_loupe._tcp</string>
+</array>
 ```
 
-Your device will appear in the sidebar. Click to attach.
+### 4. Attach
+
+Make sure your iPhone and Mac are on the same Wi-Fi. Your device will appear in the Mac app's sidebar automatically — click to attach. That's it.
 
 ---
 
