@@ -10,7 +10,7 @@ struct FilterView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.tfBackground.ignoresSafeArea()
+                Color.lpBackground.ignoresSafeArea()
 
                 List {
                     // MARK: - Method
@@ -86,7 +86,7 @@ struct FilterView: View {
                                     .font(.system(size: 14))
                             } icon: {
                                 Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundStyle(Color.tfDanger)
+                                    .foregroundStyle(Color.lpDanger)
                             }
                         }
                         .tint(.blue)
@@ -129,10 +129,10 @@ struct FilterView: View {
             }
             .navigationTitle("Filters")
             .navigationBarTitleDisplayMode(.inline)
-            .tfNavigationBar()
+            .lpNavigationBar()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    TFBackButton { dismiss() }
+                    LPBackButton { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button { dismiss() } label: {
@@ -218,10 +218,10 @@ struct FilterView: View {
     private func statusChipColor(_ f: StatusFilter) -> Color {
         switch f {
         case .all:         return Color(uiColor: .secondaryLabel)
-        case .success:     return .tfSuccess
-        case .redirect:    return .tfWarning
-        case .clientError: return .tfDanger
-        case .serverError: return .tfCritical
+        case .success:     return .lpSuccess
+        case .redirect:    return .lpWarning
+        case .clientError: return .lpDanger
+        case .serverError: return .lpCritical
         case .failed:      return .red
         case .pending:     return .blue
         }

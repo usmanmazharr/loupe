@@ -61,7 +61,7 @@ struct MockEngineView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Mock Engine")
         .navigationBarTitleDisplayMode(.inline)
-        .tfNavigationBar()
+        .lpNavigationBar()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button { showAddRule = true } label: {
@@ -207,9 +207,9 @@ struct AddRuleView: View {
             }
             .navigationTitle("New Rule")
             .navigationBarTitleDisplayMode(.inline)
-            .tfNavigationBar()
+            .lpNavigationBar()
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) { TFBackButton { dismiss() } }
+                ToolbarItem(placement: .navigationBarLeading) { LPBackButton { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
                         let bodyData = responseBody.isEmpty ? nil : responseBody.data(using: .utf8)

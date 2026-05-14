@@ -30,7 +30,7 @@ public enum ScreenTracker {
 
     private static let _once: Void = {
         let sel         = #selector(UIViewController.viewDidAppear(_:))
-        let swizzledSel = #selector(UIViewController.tf_viewDidAppear(_:))
+        let swizzledSel = #selector(UIViewController.lp_viewDidAppear(_:))
         guard
             let original = class_getInstanceMethod(UIViewController.self, sel),
             let swizzled = class_getInstanceMethod(UIViewController.self, swizzledSel)
@@ -76,9 +76,9 @@ public enum ScreenTracker {
 
 extension UIViewController {
     /// Swapped with `viewDidAppear(_:)` by `ScreenTracker.enable()`.
-    @objc func tf_viewDidAppear(_ animated: Bool) {
+    @objc func lp_viewDidAppear(_ animated: Bool) {
         // After the method exchange this line calls the *original* viewDidAppear.
-        tf_viewDidAppear(animated)
+        lp_viewDidAppear(animated)
 
         guard let name = ScreenTracker.screenName(for: self) else { return }
         Loupe.shared.setCurrentScreen(name)

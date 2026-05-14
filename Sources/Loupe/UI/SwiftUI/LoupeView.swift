@@ -142,13 +142,14 @@ public struct LoupeView: View {
     @State private var showInsights = false
     @State private var showConsole = false
     @State private var showAnalytics = false
+    @State private var showCompose = false
 
     public init(isPresented: Binding<Bool>) { self._isPresented = isPresented }
 
     public var body: some View {
         NavigationView {
             ZStack {
-                Color.tfBackground.ignoresSafeArea()
+                Color.lpBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     searchBar
@@ -163,7 +164,7 @@ public struct LoupeView: View {
             .navigationTitle("Loupe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { navToolbar }
-            .tfNavigationBar()
+            .lpNavigationBar()
         }
         .navigationViewStyle(.stack)
         .preferredColorScheme(themeManager.colorScheme)
@@ -182,6 +183,10 @@ public struct LoupeView: View {
         }
         .sheet(isPresented: $showAnalytics) {
             AnalyticsView()
+                .preferredColorScheme(themeManager.colorScheme)
+        }
+        .sheet(isPresented: $showCompose) {
+            ComposeView()
                 .preferredColorScheme(themeManager.colorScheme)
         }
     }
@@ -276,16 +281,16 @@ public struct LoupeView: View {
                     filter: .all
                 )
                 if viewModel.count2xx > 0 {
-                    statPill(label: "2xx", icon: "checkmark.circle.fill",    count: viewModel.count2xx,    color: .tfSuccess,  filter: .success)
+                    statPill(label: "2xx", icon: "checkmark.circle.fill",    count: viewModel.count2xx,    color: .lpSuccess,  filter: .success)
                 }
                 if viewModel.count3xx > 0 {
-                    statPill(label: "3xx", icon: "arrow.triangle.2.circlepath", count: viewModel.count3xx, color: .tfWarning,  filter: .redirect)
+                    statPill(label: "3xx", icon: "arrow.triangle.2.circlepath", count: viewModel.count3xx, color: .lpWarning,  filter: .redirect)
                 }
                 if viewModel.count4xx > 0 {
-                    statPill(label: "4xx", icon: "exclamationmark.circle.fill", count: viewModel.count4xx, color: .tfDanger,   filter: .clientError)
+                    statPill(label: "4xx", icon: "exclamationmark.circle.fill", count: viewModel.count4xx, color: .lpDanger,   filter: .clientError)
                 }
                 if viewModel.count5xx > 0 {
-                    statPill(label: "5xx", icon: "xmark.octagon.fill",          count: viewModel.count5xx, color: .tfCritical, filter: .serverError)
+                    statPill(label: "5xx", icon: "xmark.octagon.fill",          count: viewModel.count5xx, color: .lpCritical, filter: .serverError)
                 }
                 if viewModel.countFailed > 0 {
                     statPill(label: "ERR", icon: "bolt.slash.fill",             count: viewModel.countFailed, color: .red, filter: .failed)
@@ -377,6 +382,9 @@ public struct LoupeView: View {
         }
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             Menu {
+                Button {
+                    showCompose = true
+                } label: { Label("Compose Request", systemImage: "paperplane") }
                 Button {
                     showConsole = true
                 } label: { Label("Console", systemImage: "text.alignleft") }

@@ -21,6 +21,7 @@ struct ContentView: View {
     private var content: some View {
         switch appState.viewMode {
         case .network:  MacConsoleView()
+        case .compose:  MacComposeView()
         case .console:  MacConsoleLogView()
         case .events:   MacAnalyticsEventsView()
         case .insights: MacInsightsView()
@@ -36,6 +37,9 @@ struct ContentView: View {
             } else {
                 placeholder("arrow.left.doc.on.clipboard", "Select a request to inspect")
             }
+        case .compose:
+            placeholder("paperplane",
+                        "Compose a request on the left.\nResponse appears inline.")
         case .console:
             placeholder("text.alignleft",
                         "Console log details appear inline.\nSelect a row to copy or expand.")

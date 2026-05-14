@@ -13,13 +13,13 @@ struct StatusBadge: View {
             } else {
                 switch status {
                 case .pending, .inProgress:
-                    badge(text: "···", color: .tfFog)
+                    badge(text: "···", color: .lpFog)
                 case .failed:
-                    badge(text: "ERR", color: .tfDanger)
+                    badge(text: "ERR", color: .lpDanger)
                 case .cancelled:
-                    badge(text: "CXL", color: .tfWarning)
+                    badge(text: "CXL", color: .lpWarning)
                 case .completed:
-                    badge(text: "—", color: .tfFog)
+                    badge(text: "—", color: .lpFog)
                 }
             }
         }

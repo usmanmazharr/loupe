@@ -42,7 +42,7 @@ struct EmptyStateView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.tfBackground)
+        .background(Color.lpBackground)
     }
 
     // MARK: Private
@@ -59,7 +59,7 @@ struct EmptyStateView: View {
         switch kind {
         case .noRequests: return .blue
         case .noResults:  return Color(uiColor: .secondaryLabel)
-        case .error:      return .tfDanger
+        case .error:      return .lpDanger
         }
     }
 

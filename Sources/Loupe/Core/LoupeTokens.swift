@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Design tokens for spacing, radii, and typography. Color tokens live on
 /// `Color` (see `Color+Extensions.swift`).
-public enum TF {
+public enum LP {
 
     // MARK: - Spacing
 

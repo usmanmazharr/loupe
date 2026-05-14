@@ -34,7 +34,7 @@ struct RequestDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.tfCardBackground)
+                .background(Color.lpCardBackground)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
@@ -45,7 +45,7 @@ struct RequestDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
-            .background(Color.tfCardBackground)
+            .background(Color.lpCardBackground)
 
             Divider()
 
@@ -75,7 +75,7 @@ struct RequestDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar { toolbarItems }
-        .tfNavigationBar()
+        .lpNavigationBar()
     }
 
     // MARK: - Search bar
@@ -97,7 +97,7 @@ struct RequestDetailView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.tfCardBackground)
+        .background(Color.lpCardBackground)
     }
 
     // MARK: - Header
@@ -264,7 +264,7 @@ struct RequestDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -296,7 +296,7 @@ struct RequestDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func infoRow(_ key: String, value: String) -> some View {
@@ -320,7 +320,7 @@ struct RequestDetailView: View {
                     Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
                     Text("Back").font(.system(size: 15, weight: .medium))
                 }
-                .foregroundStyle(Color.tfInk)
+                .foregroundStyle(Color.lpInk)
             }
         }
         ToolbarItemGroup(placement: .navigationBarTrailing) {

@@ -48,7 +48,7 @@ struct MacConsoleLogView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.mfSurface, in: RoundedRectangle(cornerRadius: 10))
+            .background(Color.lpSurface, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 12)
             .padding(.top, 10)
 
@@ -119,7 +119,7 @@ struct MacConsoleLogView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
-        .background(Color.mfSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.lpSurface, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var empty: some View {

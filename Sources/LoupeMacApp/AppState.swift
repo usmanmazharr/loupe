@@ -7,6 +7,7 @@ final class AppState: ObservableObject {
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case network = "Network"
+        case compose = "Compose"
         case console = "Console"
         case events  = "Events"
         case insights = "Insights"
@@ -14,6 +15,7 @@ final class AppState: ObservableObject {
         var systemImage: String {
             switch self {
             case .network:  return "network"
+            case .compose:  return "paperplane"
             case .console:  return "text.alignleft"
             case .events:   return "chart.line.uptrend.xyaxis"
             case .insights: return "chart.bar.xaxis"

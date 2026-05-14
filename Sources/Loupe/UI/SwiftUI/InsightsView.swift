@@ -26,8 +26,8 @@ struct InsightsView: View {
             }
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.inline)
-            .background(Color.tfBackground.ignoresSafeArea())
-            .tfNavigationBar()
+            .background(Color.lpBackground.ignoresSafeArea())
+            .lpNavigationBar()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
@@ -50,15 +50,15 @@ struct InsightsView: View {
             tile(label: "Total", value: "\(total)", icon: "tray.full", color: .blue)
             tile(label: "Success",
                  value: total == 0 ? "—" : "\(Int(Double(success) / Double(total) * 100))%",
-                 icon: "checkmark.seal", color: .tfSuccess)
+                 icon: "checkmark.seal", color: .lpSuccess)
             tile(label: "Failures",
                  value: "\(failed)",
                  sub: total == 0 ? nil : "\(Int(Double(failed) / Double(total) * 100))% of total",
-                 icon: "exclamationmark.triangle", color: .tfDanger)
+                 icon: "exclamationmark.triangle", color: .lpDanger)
             tile(label: "Bandwidth", value: totalBytes.formattedSize, icon: "arrow.down.circle", color: .indigo)
             tile(label: "Avg",
                  value: avgDuration.map(formatDuration) ?? "—",
-                 icon: "clock", color: .tfWarning)
+                 icon: "clock", color: .lpWarning)
             tile(label: "p95",
                  value: p95.map(formatDuration) ?? "—",
                  icon: "speedometer", color: .purple)
@@ -86,7 +86,7 @@ struct InsightsView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Sections
@@ -99,7 +99,7 @@ struct InsightsView: View {
         return listSection(title: "Slowest 5", entries: Array(top)) { entry in
             Text(formatDuration(entry.timing.totalDuration ?? 0))
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(Color.tfDanger)
+                .foregroundStyle(Color.lpDanger)
         }
     }
 
@@ -111,7 +111,7 @@ struct InsightsView: View {
             listSection(title: "Recent Failures", entries: top) { entry in
                 Text(entry.statusCode.map(String.init) ?? "—")
                     .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(Color.tfDanger)
+                    .foregroundStyle(Color.lpDanger)
             }
         )
     }
@@ -157,7 +157,7 @@ struct InsightsView: View {
                     }
                 }
             }
-            .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+            .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -198,7 +198,7 @@ struct InsightsView: View {
                     }
                 }
             }
-            .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+            .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 

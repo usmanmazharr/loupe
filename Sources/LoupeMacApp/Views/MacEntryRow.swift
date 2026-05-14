@@ -24,12 +24,12 @@ struct MacEntryRow: View {
                 } else if let code = entry.statusCode {
                     Text(String(code))
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.mfStatusColor(code))
+                        .foregroundStyle(Color.lpStatusColor(code))
                         .frame(width: 36, alignment: .leading)
                 } else {
                     Text(entry.status == .failed ? "ERR" : "—")
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(entry.status == .failed ? Color.mfDanger : Color.mfFog)
+                        .foregroundStyle(entry.status == .failed ? Color.lpDanger : Color.lpFog)
                         .frame(width: 36, alignment: .leading)
                 }
             }
@@ -40,16 +40,16 @@ struct MacEntryRow: View {
                     if entry.isPinned {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 9))
-                            .foregroundStyle(Color.mfWarning)
+                            .foregroundStyle(Color.lpWarning)
                     }
                     Text(entry.path)
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(Color.mfInk)
+                        .foregroundStyle(Color.lpInk)
                         .lineLimit(1)
                 }
                 Text(entry.host)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(Color.mfFog)
+                    .foregroundStyle(Color.lpFog)
                     .lineLimit(1)
             }
 
@@ -60,7 +60,7 @@ struct MacEntryRow: View {
                 if entry.responseSize > 0 {
                     Text(entry.responseSize.macFormattedSize)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color.mfFog)
+                        .foregroundStyle(Color.lpFog)
                 }
                 Text(entry.timing.formattedDuration)
                     .font(.system(size: 10, design: .monospaced))
@@ -73,13 +73,13 @@ struct MacEntryRow: View {
     // MARK: - Colors
 
     private var methodColor: Color {
-        .mfMethodColor(entry.method)
+        .lpMethodColor(entry.method)
     }
 
     private var durationColor: Color {
-        guard let d = entry.timing.totalDuration else { return .mfFog }
-        if d < 0.3 { return .mfSuccess }
-        if d < 1.0 { return .mfWarning }
-        return .mfDanger
+        guard let d = entry.timing.totalDuration else { return .lpFog }
+        if d < 0.3 { return .lpSuccess }
+        if d < 1.0 { return .lpWarning }
+        return .lpDanger
     }
 }

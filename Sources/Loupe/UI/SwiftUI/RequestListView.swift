@@ -335,20 +335,20 @@ private struct EntryRow: View {
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 12)
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var accentColor: Color {
         if let code = entry.statusCode { return Color.statusColor(for: code) }
-        if entry.status == .failed     { return .tfDanger }
+        if entry.status == .failed     { return .lpDanger }
         if entry.status == .inProgress { return .blue }
         return Color(uiColor: .tertiaryLabel)
     }
 
     private var durationColor: Color {
         guard let d = entry.timing.totalDuration else { return Color(uiColor: .secondaryLabel) }
-        if d < 0.3 { return .tfSuccess }
-        if d < 1.0 { return .tfWarning }
-        return .tfDanger
+        if d < 0.3 { return .lpSuccess }
+        if d < 1.0 { return .lpWarning }
+        return .lpDanger
     }
 }

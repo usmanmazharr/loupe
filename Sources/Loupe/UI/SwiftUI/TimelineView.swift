@@ -71,7 +71,7 @@ struct RequestTimelineView: View {
             }
         }
         .padding()
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Waterfall
@@ -94,7 +94,7 @@ struct RequestTimelineView: View {
             }
         }
         .padding()
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func waterfallBar(phase: Phase) -> some View {
@@ -133,7 +133,7 @@ struct RequestTimelineView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(32)
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Timestamps
@@ -153,7 +153,7 @@ struct RequestTimelineView: View {
                 if let d = detail.responseEnd  { tsRow("Response Done",  date: d, base: base) }
             }
             .padding()
-            .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
+            .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
         )
     }
 

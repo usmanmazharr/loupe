@@ -128,7 +128,7 @@ struct MacAnalyticsEventsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.mfSurface, in: RoundedRectangle(cornerRadius: 10))
+            .background(Color.lpSurface, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 12)
             .padding(.top, 10)
 
@@ -174,10 +174,10 @@ struct MacAnalyticsEventsView: View {
                     Text("\(count)").font(.system(size: 10, weight: .bold, design: .rounded))
                 }
             }
-            .foregroundStyle(selected ? Color.white : Color.mfAccent)
+            .foregroundStyle(selected ? Color.white : Color.lpAccent)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(selected ? Color.mfAccent : Color.mfAccent.opacity(0.10), in: Capsule())
+            .background(selected ? Color.lpAccent : Color.lpAccent.opacity(0.10), in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -226,7 +226,7 @@ struct MacAnalyticsEventsView: View {
                             .foregroundStyle(.indigo)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color.mfAccent.opacity(0.12), in: Capsule())
+                            .background(Color.lpAccent.opacity(0.12), in: Capsule())
                     }
                     Text(event.timestamp, style: .time)
                         .font(.system(size: 10).monospacedDigit())
@@ -261,7 +261,7 @@ struct MacAnalyticsEventsView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
-        .background(Color.mfSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.lpSurface, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var empty: some View {

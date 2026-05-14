@@ -63,13 +63,13 @@ public struct AnalyticsView: View {
                     flatList
                 }
             }
-            .background(Color.tfBackground.ignoresSafeArea())
+            .background(Color.lpBackground.ignoresSafeArea())
             .navigationTitle("Events")
             .navigationBarTitleDisplayMode(.inline)
-            .tfNavigationBar()
+            .lpNavigationBar()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    TFBackButton { dismiss() }
+                    LPBackButton { dismiss() }
                 }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
@@ -300,7 +300,7 @@ public struct AnalyticsView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
-        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var empty: some View {

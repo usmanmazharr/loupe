@@ -9,89 +9,89 @@ extension Color {
 
     // MARK: - Surface
 
-    static let mfBackground = Color(nsColor: NSColor.macDynamic(
+    static let lpBackground = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0xFAFAFC),
         dark:  NSColor(hex: 0x0E0F13)
     ))
 
-    static let mfCard = Color(nsColor: NSColor.macDynamic(
+    static let lpCard = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0xFFFFFF),
         dark:  NSColor(hex: 0x16181D)
     ))
 
-    static let mfSurface = Color(nsColor: NSColor.macDynamic(
+    static let lpSurface = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0xF2F3F7),
         dark:  NSColor(hex: 0x1B1E24)
     ))
 
-    static let mfHairline = Color(nsColor: NSColor.macDynamic(
+    static let lpHairline = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0xE6E8EE),
         dark:  NSColor(hex: 0x22252B)
     ))
 
     // MARK: - Foreground
 
-    static let mfInk = Color(nsColor: NSColor.macDynamic(
+    static let lpInk = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0x0F1115),
         dark:  NSColor(hex: 0xF4F5F7)
     ))
 
-    static let mfFog = Color(nsColor: NSColor.macDynamic(
+    static let lpFog = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0x6E7280),
         dark:  NSColor(hex: 0x9099A8)
     ))
 
     // MARK: - Accent
 
-    static let mfAccent = Color(nsColor: NSColor(hex: 0x1B4DFF))
+    static let lpAccent = Color(nsColor: NSColor(hex: 0x1B4DFF))
 
-    static let mfAccentSoft = Color(nsColor: NSColor.macDynamic(
+    static let lpAccentSoft = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0x1B4DFF).withAlphaComponent(0.10),
         dark:  NSColor(hex: 0x5E7BFF).withAlphaComponent(0.18)
     ))
 
     // MARK: - Semantic
 
-    static let mfSuccess = Color(nsColor: NSColor.macDynamic(
+    static let lpSuccess = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0x1F9D55),
         dark:  NSColor(hex: 0x4FBE7A)
     ))
-    static let mfWarning = Color(nsColor: NSColor.macDynamic(
+    static let lpWarning = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0xB58100),
         dark:  NSColor(hex: 0xE0AC4A)
     ))
-    static let mfDanger = Color(nsColor: NSColor.macDynamic(
+    static let lpDanger = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0xC24545),
         dark:  NSColor(hex: 0xE07070)
     ))
-    static let mfCritical = Color(nsColor: NSColor.macDynamic(
+    static let lpCritical = Color(nsColor: NSColor.macDynamic(
         light: NSColor(hex: 0x8B1E1E),
         dark:  NSColor(hex: 0xC95757)
     ))
 
     // MARK: - Helpers
 
-    static func mfMethodColor(_ method: String) -> Color {
+    static func lpMethodColor(_ method: String) -> Color {
         switch method.uppercased() {
-        case "GET":     return .mfAccent
-        case "POST":    return .mfSuccess
-        case "PUT":     return .mfWarning
+        case "GET":     return .lpAccent
+        case "POST":    return .lpSuccess
+        case "PUT":     return .lpWarning
         case "PATCH":   return Color(nsColor: NSColor(hex: 0xC97A00))
-        case "DELETE":  return .mfDanger
+        case "DELETE":  return .lpDanger
         case "HEAD":    return Color(nsColor: NSColor(hex: 0x5B4DBE))
         case "OPTIONS": return Color(nsColor: NSColor(hex: 0x7A5BBE))
-        default:        return .mfFog
+        default:        return .lpFog
         }
     }
 
-    static func mfStatusColor(_ code: Int?) -> Color {
-        guard let code else { return .mfFog }
+    static func lpStatusColor(_ code: Int?) -> Color {
+        guard let code else { return .lpFog }
         switch code {
-        case 200..<300: return .mfSuccess
-        case 300..<400: return .mfWarning
-        case 400..<500: return .mfDanger
-        case 500..<600: return .mfCritical
-        default:        return .mfFog
+        case 200..<300: return .lpSuccess
+        case 300..<400: return .lpWarning
+        case 400..<500: return .lpDanger
+        case 500..<600: return .lpCritical
+        default:        return .lpFog
         }
     }
 }

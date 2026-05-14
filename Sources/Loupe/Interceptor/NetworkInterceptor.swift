@@ -20,8 +20,8 @@ public final class NetworkInterceptor: URLProtocol, @unchecked Sendable {
 
     public static func register() {
         URLProtocol.registerClass(NetworkInterceptor.self)
-        URLSessionConfiguration.tfSwizzle()
-        URLSession.tfSwizzle()
+        URLSessionConfiguration.lpSwizzle()
+        URLSession.lpSwizzle()
     }
 
     public static func unregister() {
@@ -68,7 +68,7 @@ public final class NetworkInterceptor: URLProtocol, @unchecked Sendable {
         }
 
         // Create a bypass session that makes real network calls without re-interception.
-        let config = URLSessionConfiguration.tfBypass()
+        let config = URLSessionConfiguration.lpBypass()
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         internalSession = session
         dataTask = session.dataTask(with: mutableRequest as URLRequest)
@@ -203,7 +203,7 @@ extension URLSessionConfiguration {
 
     /// A clean ephemeral config with no protocol classes — used by the interceptor's
     /// own forwarding session so it never re-intercepts its own requests.
-    static func tfBypass() -> URLSessionConfiguration {
+    static func lpBypass() -> URLSessionConfiguration {
         // Call the un-swizzled ephemeral getter (after swap, tf_ephemeral IS the original)
         let config = URLSessionConfiguration.tf_ephemeral
         config.protocolClasses = []
@@ -213,7 +213,7 @@ extension URLSessionConfiguration {
         return config
     }
 
-    static func tfSwizzle() {
+    static func lpSwizzle() {
         let cls = URLSessionConfiguration.self
         swizzleClassMethod(cls,
                            original: #selector(getter: URLSessionConfiguration.default),
@@ -250,20 +250,20 @@ extension URLSessionConfiguration {
 
 extension URLSession {
 
-    static func tfSwizzle() {
+    static func lpSwizzle() {
         // initWithConfiguration:delegate:delegateQueue:  (designated init)
-        tfSwizzleInit(
+        lpSwizzleInit(
             original: NSSelectorFromString("initWithConfiguration:delegate:delegateQueue:"),
             swizzled: NSSelectorFromString("tf_initWithConfiguration:delegate:delegateQueue:")
         )
         // initWithConfiguration:  (convenience init — may or may not forward to the above)
-        tfSwizzleInit(
+        lpSwizzleInit(
             original: NSSelectorFromString("initWithConfiguration:"),
             swizzled: NSSelectorFromString("tf_initWithConfiguration:")
         )
     }
 
-    private static func tfSwizzleInit(original: Selector, swizzled: Selector) {
+    private static func lpSwizzleInit(original: Selector, swizzled: Selector) {
         guard let orig = class_getInstanceMethod(URLSession.self, original),
               let swiz = class_getInstanceMethod(URLSession.self, swizzled)
         else { return }
