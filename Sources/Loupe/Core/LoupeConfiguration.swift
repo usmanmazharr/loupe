@@ -110,6 +110,14 @@ public struct LoupeConfiguration {
     ///   NSBonjourServices               → _loupe._tcp.
     public var remoteLoggingEnabled: Bool = false
 
+    /// Serve a web dashboard on a localhost HTTP port so anyone on the same
+    /// Wi-Fi can view captured traffic in a browser (no Mac app needed).
+    /// Open `http://<device-ip>:<webDashboardPort>` in any browser.
+    public var webDashboardEnabled: Bool = false
+
+    /// TCP port for the web dashboard HTTP server (default 9800).
+    public var webDashboardPort: UInt16 = 9800
+
     // MARK: - Factory
 
     public init() {}
@@ -122,6 +130,7 @@ public struct LoupeConfiguration {
         config.osLogEnabled           = true
         config.enablePersistentStorage = true
         config.remoteLoggingEnabled   = true
+        config.webDashboardEnabled    = true
         return config
     }
 
