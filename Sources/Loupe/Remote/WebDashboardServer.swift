@@ -6,7 +6,7 @@ import CryptoKit
 actor WebDashboardServer {
 
     private var listener: NWListener?
-    private var connections: [ObjectIdentifier: NWConnection] = [:]
+    private var httpConnections: [ObjectIdentifier: NWConnection] = [:]
     private var wsConnections: [ObjectIdentifier: NWConnection] = [:]
 
     private var entriesCancellable: AnyCancellable?
@@ -29,15 +29,15 @@ actor WebDashboardServer {
         guard listener == nil else { return }
         do {
             let params = NWParameters.tcp
-            let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
-            listener.stateUpdateHandler = { [weak self] state in
+            let l = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+            l.stateUpdateHandler = { [weak self] state in
                 Task { await self?.onListenerState(state) }
             }
-            listener.newConnectionHandler = { [weak self] conn in
+            l.newConnectionHandler = { [weak self] conn in
                 Task { await self?.accept(conn) }
             }
-            listener.start(queue: .global(qos: .utility))
-            self.listener = listener
+            l.start(queue: .global(qos: .utility))
+            self.listener = l
 
             entriesCancellable = LogManager.shared.entriesPublisher
                 .dropFirst()
@@ -60,7 +60,7 @@ actor WebDashboardServer {
                     Task { await self?.broadcastEventChanges(events) }
                 }
 
-            print("[WebDashboard] started on port \(port) — open http://<device-ip>:\(port) in any browser")
+            print("[WebDashboard] started on port \(port) — open http://<device-ip>:\(port)")
         } catch {
             print("[WebDashboard] failed to start: \(error.localizedDescription)")
         }
@@ -70,9 +70,9 @@ actor WebDashboardServer {
         entriesCancellable = nil
         logsCancellable = nil
         eventsCancellable = nil
-        for (_, conn) in connections { conn.cancel() }
-        for (_, conn) in wsConnections { conn.cancel() }
-        connections.removeAll()
+        for (_, c) in httpConnections { c.cancel() }
+        for (_, c) in wsConnections { c.cancel() }
+        httpConnections.removeAll()
         wsConnections.removeAll()
         listener?.cancel()
         listener = nil
@@ -98,85 +98,77 @@ actor WebDashboardServer {
         }
     }
 
-    // MARK: - Connection Handling
+    // MARK: - Accept
 
-    private func accept(_ connection: NWConnection) {
-        let key = ObjectIdentifier(connection)
-        connections[key] = connection
-        connection.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .cancelled, .failed:
-                Task { await self?.remove(connection) }
-            default:
-                break
-            }
+    private func accept(_ conn: NWConnection) {
+        let key = ObjectIdentifier(conn)
+        httpConnections[key] = conn
+        conn.stateUpdateHandler = { [weak self] state in
+            if case .cancelled = state { Task { await self?.removeAll(conn) } }
+            if case .failed = state    { Task { await self?.removeAll(conn) } }
         }
-        connection.start(queue: .global(qos: .utility))
-        receiveHTTP(on: connection)
+        conn.start(queue: .global(qos: .utility))
+        scheduleHTTPReceive(on: conn)
     }
 
-    private func remove(_ connection: NWConnection) {
-        let key = ObjectIdentifier(connection)
-        connections.removeValue(forKey: key)
+    private func removeAll(_ conn: NWConnection) {
+        let key = ObjectIdentifier(conn)
+        httpConnections.removeValue(forKey: key)
         wsConnections.removeValue(forKey: key)
     }
 
     // MARK: - HTTP Receive
 
-    private func receiveHTTP(on conn: NWConnection) {
-        conn.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
-            Task { [weak self] in
-                guard let self, let data else { return }
-                let upgraded = await self.handleHTTPRequest(data, on: conn)
-                if !upgraded, error == nil, !isComplete {
-                    await self.receiveHTTP(on: conn)
-                }
-            }
+    private nonisolated func scheduleHTTPReceive(on conn: NWConnection) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, _, error in
+            guard let self, let data, error == nil else { return }
+            Task { await self.routeHTTP(data, on: conn) }
         }
     }
 
-    // MARK: - HTTP Request Routing
+    // MARK: - HTTP Routing
 
-    /// Returns `true` if the connection was upgraded to WebSocket.
-    @discardableResult
-    private func handleHTTPRequest(_ data: Data, on conn: NWConnection) async -> Bool {
-        guard let raw = String(data: data, encoding: .utf8) else { return false }
+    private func routeHTTP(_ data: Data, on conn: NWConnection) async {
+        guard let raw = String(data: data, encoding: .utf8) else { return }
         let lines = raw.components(separatedBy: "\r\n")
-        guard let requestLine = lines.first else { return false }
+        guard let requestLine = lines.first else { return }
         let parts = requestLine.split(separator: " ", maxSplits: 2)
-        guard parts.count >= 2 else { return false }
+        guard parts.count >= 2 else { return }
         let method = String(parts[0])
         let path = String(parts[1])
-
         let headers = parseHeaders(lines)
 
-        if method == "GET" && path == "/ws" {
-            if let wsKey = headers["sec-websocket-key"] {
-                await upgradeToWebSocket(conn, key: wsKey)
-                return true
-            }
+        // WebSocket upgrade
+        if method == "GET" && path == "/ws",
+           let wsKey = headers["sec-websocket-key"] {
+            performWebSocketUpgrade(conn, clientKey: wsKey)
+            return
         }
 
-        let (status, contentType, body): (String, String, Data)
+        // Normal HTTP
+        let (status, contentType, body) = await handleAPI(method: method, path: path)
+        sendHTTPResponse(conn, status: status, contentType: contentType, body: body, close: true)
+    }
 
+    private func handleAPI(method: String, path: String) async -> (String, String, Data) {
         switch (method, path) {
         case ("GET", "/"):
-            (status, contentType, body) = ("200 OK", "text/html; charset=utf-8", Data(WebDashboardHTML.page.utf8))
+            return ("200 OK", "text/html; charset=utf-8", Data(WebDashboardHTML.page.utf8))
 
         case ("GET", "/api/entries"):
             let entries = await LogManager.shared.allEntries()
             let json = (try? JSONEncoder().encode(entries)) ?? Data("[]".utf8)
-            (status, contentType, body) = ("200 OK", "application/json", json)
+            return ("200 OK", "application/json", json)
 
         case ("GET", "/api/logs"):
             let logs = await LogMessageStore.shared.allMessages()
             let json = (try? JSONEncoder().encode(logs)) ?? Data("[]".utf8)
-            (status, contentType, body) = ("200 OK", "application/json", json)
+            return ("200 OK", "application/json", json)
 
         case ("GET", "/api/events"):
             let events = await AnalyticsEventStore.shared.allEvents()
             let json = (try? JSONEncoder().encode(events)) ?? Data("[]".utf8)
-            (status, contentType, body) = ("200 OK", "application/json", json)
+            return ("200 OK", "application/json", json)
 
         case ("GET", let p) where p.hasPrefix("/api/entries/"):
             let idStr = String(p.dropFirst("/api/entries/".count))
@@ -184,138 +176,117 @@ actor WebDashboardServer {
                 let entries = await LogManager.shared.allEntries()
                 if let entry = entries.first(where: { $0.effectiveID == uuid }) {
                     let json = (try? JSONEncoder().encode(entry)) ?? Data("{}".utf8)
-                    (status, contentType, body) = ("200 OK", "application/json", json)
-                } else {
-                    (status, contentType, body) = ("404 Not Found", "application/json", Data("{\"error\":\"not found\"}".utf8))
+                    return ("200 OK", "application/json", json)
                 }
-            } else {
-                (status, contentType, body) = ("400 Bad Request", "application/json", Data("{\"error\":\"invalid id\"}".utf8))
+                return ("404 Not Found", "application/json", Data("{\"error\":\"not found\"}".utf8))
             }
+            return ("400 Bad Request", "application/json", Data("{\"error\":\"invalid id\"}".utf8))
 
         case ("DELETE", "/api/entries"):
             await LogManager.shared.clearAll(keepingPinned: false)
-            (status, contentType, body) = ("200 OK", "application/json", Data("{\"ok\":true}".utf8))
+            return ("200 OK", "application/json", Data("{\"ok\":true}".utf8))
 
         default:
-            (status, contentType, body) = ("404 Not Found", "text/plain", Data("Not Found".utf8))
+            return ("404 Not Found", "text/plain", Data("Not Found".utf8))
         }
-
-        let response = buildHTTPResponse(status: status, contentType: contentType, body: body)
-        conn.send(content: response, completion: .contentProcessed { _ in
-            conn.cancel()
-        })
-        return false
     }
+
+    // MARK: - HTTP Helpers
 
     private func parseHeaders(_ lines: [String]) -> [String: String] {
-        var headers: [String: String] = [:]
+        var h: [String: String] = [:]
         for line in lines.dropFirst() {
             if line.isEmpty { break }
-            if let colonIdx = line.firstIndex(of: ":") {
-                let key = line[line.startIndex..<colonIdx].trimmingCharacters(in: .whitespaces).lowercased()
-                let value = line[line.index(after: colonIdx)...].trimmingCharacters(in: .whitespaces)
-                headers[key] = value
+            if let idx = line.firstIndex(of: ":") {
+                let k = line[line.startIndex..<idx].trimmingCharacters(in: .whitespaces).lowercased()
+                let v = line[line.index(after: idx)...].trimmingCharacters(in: .whitespaces)
+                h[k] = v
             }
         }
-        return headers
+        return h
     }
 
-    private func buildHTTPResponse(status: String, contentType: String, body: Data) -> Data {
-        let header = """
-        HTTP/1.1 \(status)\r
-        Content-Type: \(contentType)\r
-        Content-Length: \(body.count)\r
-        Access-Control-Allow-Origin: *\r
-        Connection: close\r
-        \r\n
-        """
-        var response = Data(header.utf8)
-        response.append(body)
-        return response
+    private nonisolated func sendHTTPResponse(_ conn: NWConnection, status: String, contentType: String, body: Data, close: Bool) {
+        var header = "HTTP/1.1 \(status)\r\n"
+        header += "Content-Type: \(contentType)\r\n"
+        header += "Content-Length: \(body.count)\r\n"
+        header += "Access-Control-Allow-Origin: *\r\n"
+        if close { header += "Connection: close\r\n" }
+        header += "\r\n"
+        var payload = Data(header.utf8)
+        payload.append(body)
+        conn.send(content: payload, completion: .contentProcessed { _ in
+            if close { conn.cancel() }
+        })
     }
 
     // MARK: - WebSocket Upgrade
 
-    private func upgradeToWebSocket(_ conn: NWConnection, key: String) async {
-        let acceptKey = computeWebSocketAccept(key)
-        let response = """
-        HTTP/1.1 101 Switching Protocols\r
-        Upgrade: websocket\r
-        Connection: Upgrade\r
-        Sec-WebSocket-Accept: \(acceptKey)\r
-        \r\n
-        """
-        conn.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] _ in
-            Task { [weak self] in
-                guard let self else { return }
-                let key = ObjectIdentifier(conn)
-                await self.addWSConnection(key: key, conn: conn)
-                await self.sendInitialWSData(conn)
-                await self.receiveWSFrames(on: conn)
+    private nonisolated func performWebSocketUpgrade(_ conn: NWConnection, clientKey: String) {
+        let acceptKey = computeAcceptKey(clientKey)
+        var response = "HTTP/1.1 101 Switching Protocols\r\n"
+        response += "Upgrade: websocket\r\n"
+        response += "Connection: Upgrade\r\n"
+        response += "Sec-WebSocket-Accept: \(acceptKey)\r\n"
+        response += "\r\n"
+        conn.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] error in
+            guard error == nil, let self else { return }
+            Task {
+                await self.didUpgradeWebSocket(conn)
             }
         })
     }
 
-    private func addWSConnection(key: ObjectIdentifier, conn: NWConnection) {
+    private func didUpgradeWebSocket(_ conn: NWConnection) async {
+        let key = ObjectIdentifier(conn)
         wsConnections[key] = conn
-        print("[WebDashboard] WebSocket client connected (\(wsConnections.count) total)")
+        print("[WebDashboard] WebSocket connected (\(wsConnections.count) total)")
+
+        // Send current state
+        await sendWSSnapshot(to: conn)
+
+        // Start reading WS frames
+        scheduleWSReceive(on: conn)
     }
 
-    private func computeWebSocketAccept(_ key: String) -> String {
-        let magic = key + "258EAFA5-E914-47DA-95CA-5AB5AA86BE78"
+    private nonisolated func computeAcceptKey(_ clientKey: String) -> String {
+        let magic = clientKey + "258EAFA5-E914-47DA-95CA-5AB5AA86BE78"
         let hash = Insecure.SHA1.hash(data: Data(magic.utf8))
         return Data(hash).base64EncodedString()
     }
 
-    // MARK: - WebSocket Frames
+    // MARK: - WebSocket Send / Receive
 
-    private func sendInitialWSData(_ conn: NWConnection) async {
+    private func sendWSSnapshot(to conn: NWConnection) async {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
         let entries = await LogManager.shared.allEntries()
-        if !entries.isEmpty, let json = try? JSONEncoder().encode(entries) {
-            let msg = WSDashboardMessage(type: "entries", payload: String(data: json, encoding: .utf8) ?? "[]")
-            if let data = try? JSONEncoder().encode(msg) {
-                sendWSFrame(String(data: data, encoding: .utf8) ?? "", to: conn)
-            }
+        if !entries.isEmpty, let json = try? encoder.encode(entries) {
+            sendWSJSON(type: "entries", json: json, to: conn)
         }
 
         let logs = await LogMessageStore.shared.allMessages()
-        if !logs.isEmpty, let json = try? JSONEncoder().encode(logs) {
-            let msg = WSDashboardMessage(type: "logs", payload: String(data: json, encoding: .utf8) ?? "[]")
-            if let data = try? JSONEncoder().encode(msg) {
-                sendWSFrame(String(data: data, encoding: .utf8) ?? "", to: conn)
-            }
+        if !logs.isEmpty, let json = try? encoder.encode(logs) {
+            sendWSJSON(type: "logs", json: json, to: conn)
         }
 
         let events = await AnalyticsEventStore.shared.allEvents()
-        if !events.isEmpty, let json = try? JSONEncoder().encode(events) {
-            let msg = WSDashboardMessage(type: "events", payload: String(data: json, encoding: .utf8) ?? "[]")
-            if let data = try? JSONEncoder().encode(msg) {
-                sendWSFrame(String(data: data, encoding: .utf8) ?? "", to: conn)
-            }
+        if !events.isEmpty, let json = try? encoder.encode(events) {
+            sendWSJSON(type: "events", json: json, to: conn)
         }
     }
 
-    private func receiveWSFrames(on conn: NWConnection) {
-        conn.receive(minimumIncompleteLength: 2, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
-            Task { [weak self] in
-                guard let self else { return }
-                if let data {
-                    let text = self.decodeWSFrame(data)
-                    if text == "ping" {
-                        self.sendWSFrame("pong", to: conn)
-                    }
-                }
-                if error == nil, !isComplete {
-                    await self.receiveWSFrames(on: conn)
-                }
-            }
-        }
+    private nonisolated func sendWSJSON(type: String, json: Data, to conn: NWConnection) {
+        guard let payload = String(data: json, encoding: .utf8) else { return }
+        let msg = "{\"type\":\"\(type)\",\"payload\":\(payload)}"
+        sendWSTextFrame(msg, to: conn)
     }
 
-    private func sendWSFrame(_ text: String, to conn: NWConnection) {
+    private nonisolated func sendWSTextFrame(_ text: String, to conn: NWConnection) {
         let payload = Data(text.utf8)
         var frame = Data()
-        frame.append(0x81) // FIN + text opcode
+        frame.append(0x81) // FIN + text
         if payload.count < 126 {
             frame.append(UInt8(payload.count))
         } else if payload.count <= 65535 {
@@ -332,7 +303,22 @@ actor WebDashboardServer {
         conn.send(content: frame, completion: .idempotent)
     }
 
-    private func decodeWSFrame(_ data: Data) -> String? {
+    private nonisolated func scheduleWSReceive(on conn: NWConnection) {
+        conn.receive(minimumIncompleteLength: 2, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let data {
+                let decoded = Self.decodeWSFrame(data)
+                if decoded == "ping" {
+                    self.sendWSTextFrame("pong", to: conn)
+                }
+            }
+            if error == nil, !isComplete {
+                self.scheduleWSReceive(on: conn)
+            }
+        }
+    }
+
+    private static func decodeWSFrame(_ data: Data) -> String? {
         guard data.count >= 2 else { return nil }
         let masked = (data[1] & 0x80) != 0
         var payloadLen = Int(data[1] & 0x7F)
@@ -356,9 +342,7 @@ actor WebDashboardServer {
         guard data.count >= offset + payloadLen else { return nil }
         var payload = Array(data[offset..<(offset + payloadLen)])
         if masked {
-            for i in 0..<payload.count {
-                payload[i] ^= maskKey[i % 4]
-            }
+            for i in 0..<payload.count { payload[i] ^= maskKey[i % 4] }
         }
         return String(bytes: payload, encoding: .utf8)
     }
@@ -367,9 +351,11 @@ actor WebDashboardServer {
 
     private func broadcastEntryChanges(_ entries: [NetworkEntry]) {
         guard !wsConnections.isEmpty else { return }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         if entries.isEmpty {
             knownSignatures.removeAll()
-            broadcastWS(WSDashboardMessage(type: "clear", payload: ""))
+            broadcastWSText("{\"type\":\"clear\",\"payload\":\"\"}")
             return
         }
         for entry in entries {
@@ -377,9 +363,9 @@ actor WebDashboardServer {
             let sig = WDEntrySignature(entry)
             if knownSignatures[key] != sig {
                 knownSignatures[key] = sig
-                if let json = try? JSONEncoder().encode(entry),
-                   let str = String(data: json, encoding: .utf8) {
-                    broadcastWS(WSDashboardMessage(type: "entry", payload: str))
+                if let json = try? encoder.encode(entry),
+                   let payload = String(data: json, encoding: .utf8) {
+                    broadcastWSText("{\"type\":\"entry\",\"payload\":\(payload)}")
                 }
             }
         }
@@ -387,31 +373,33 @@ actor WebDashboardServer {
 
     private func broadcastLogChanges(_ messages: [LogMessage]) {
         guard !wsConnections.isEmpty else { return }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         for msg in messages where !knownLogIDs.contains(msg.id) {
             knownLogIDs.insert(msg.id)
-            if let json = try? JSONEncoder().encode(msg),
-               let str = String(data: json, encoding: .utf8) {
-                broadcastWS(WSDashboardMessage(type: "log", payload: str))
+            if let json = try? encoder.encode(msg),
+               let payload = String(data: json, encoding: .utf8) {
+                broadcastWSText("{\"type\":\"log\",\"payload\":\(payload)}")
             }
         }
     }
 
     private func broadcastEventChanges(_ events: [AnalyticsEvent]) {
         guard !wsConnections.isEmpty else { return }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         for event in events where !knownEventIDs.contains(event.id) {
             knownEventIDs.insert(event.id)
-            if let json = try? JSONEncoder().encode(event),
-               let str = String(data: json, encoding: .utf8) {
-                broadcastWS(WSDashboardMessage(type: "event", payload: str))
+            if let json = try? encoder.encode(event),
+               let payload = String(data: json, encoding: .utf8) {
+                broadcastWSText("{\"type\":\"event\",\"payload\":\(payload)}")
             }
         }
     }
 
-    private func broadcastWS(_ message: WSDashboardMessage) {
-        guard let data = try? JSONEncoder().encode(message),
-              let str = String(data: data, encoding: .utf8) else { return }
+    private func broadcastWSText(_ text: String) {
         for (_, conn) in wsConnections {
-            sendWSFrame(str, to: conn)
+            sendWSTextFrame(text, to: conn)
         }
     }
 }
@@ -427,9 +415,4 @@ private struct WDEntrySignature: Equatable {
         statusCode = entry.statusCode
         isPinned = entry.isPinned
     }
-}
-
-struct WSDashboardMessage: Codable {
-    let type: String
-    let payload: String
 }
