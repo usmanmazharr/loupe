@@ -225,71 +225,43 @@ let searchQuery = '';
 let methodFilter = 'ALL';
 let levelFilters = new Set();
 let providerFilter = 'ALL';
-let ws = null;
+let sse = null;
 
-// ── WebSocket ──
+// ── Server-Sent Events ──
 function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + location.host + '/ws');
-  ws.onopen = () => {
+  if (sse) { sse.close(); }
+  sse = new EventSource('/events');
+  sse.onopen = () => {
     document.getElementById('connDot').classList.add('on');
     document.getElementById('connLabel').textContent = 'Connected';
     document.getElementById('statusWs').textContent = 'connected';
   };
-  ws.onclose = () => {
+  sse.onerror = () => {
     document.getElementById('connDot').classList.remove('on');
     document.getElementById('connLabel').textContent = 'Reconnecting…';
     document.getElementById('statusWs').textContent = 'disconnected';
-    setTimeout(connect, 2000);
   };
-  ws.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      handleMessage(msg);
-    } catch {}
-  };
-}
-
-function handleMessage(msg) {
-  switch (msg.type) {
-    case 'entries': {
-      const arr = Array.isArray(msg.payload) ? msg.payload : JSON.parse(msg.payload);
-      arr.forEach(e => upsertEntry(e));
-      break;
-    }
-    case 'entry': {
-      const e = (typeof msg.payload === 'object') ? msg.payload : JSON.parse(msg.payload);
-      upsertEntry(e);
-      break;
-    }
-    case 'logs': {
-      const arr = Array.isArray(msg.payload) ? msg.payload : JSON.parse(msg.payload);
-      arr.forEach(l => upsertLog(l));
-      break;
-    }
-    case 'log': {
-      const l = (typeof msg.payload === 'object') ? msg.payload : JSON.parse(msg.payload);
-      upsertLog(l);
-      break;
-    }
-    case 'events': {
-      const arr = Array.isArray(msg.payload) ? msg.payload : JSON.parse(msg.payload);
-      arr.forEach(ev => upsertEvent(ev));
-      break;
-    }
-    case 'event': {
-      const ev = (typeof msg.payload === 'object') ? msg.payload : JSON.parse(msg.payload);
-      upsertEvent(ev);
-      break;
-    }
-    case 'clear':
-      entries = [];
-      selectedEntry = null;
-      renderNetwork();
-      renderInsights();
-      break;
-  }
-  updateCounts();
+  sse.addEventListener('entries', (e) => {
+    try { JSON.parse(e.data).forEach(x => upsertEntry(x)); updateCounts(); } catch {}
+  });
+  sse.addEventListener('entry', (e) => {
+    try { upsertEntry(JSON.parse(e.data)); updateCounts(); } catch {}
+  });
+  sse.addEventListener('logs', (e) => {
+    try { JSON.parse(e.data).forEach(x => upsertLog(x)); updateCounts(); } catch {}
+  });
+  sse.addEventListener('log', (e) => {
+    try { upsertLog(JSON.parse(e.data)); updateCounts(); } catch {}
+  });
+  sse.addEventListener('events', (e) => {
+    try { JSON.parse(e.data).forEach(x => upsertEvent(x)); updateCounts(); } catch {}
+  });
+  sse.addEventListener('event', (e) => {
+    try { upsertEvent(JSON.parse(e.data)); updateCounts(); } catch {}
+  });
+  sse.addEventListener('clear', () => {
+    entries = []; selectedEntry = null; renderNetwork(); renderInsights(); updateCounts();
+  });
 }
 
 function upsertEntry(e) {
