@@ -225,43 +225,38 @@ let searchQuery = '';
 let methodFilter = 'ALL';
 let levelFilters = new Set();
 let providerFilter = 'ALL';
-let sse = null;
+let pollTimer = null;
+let connected = false;
 
-// ── Server-Sent Events ──
-function connect() {
-  if (sse) { sse.close(); }
-  sse = new EventSource('/events');
-  sse.onopen = () => {
-    document.getElementById('connDot').classList.add('on');
-    document.getElementById('connLabel').textContent = 'Connected';
-    document.getElementById('statusWs').textContent = 'connected';
-  };
-  sse.onerror = () => {
+// ── Polling ──
+async function poll() {
+  try {
+    const [rEntries, rLogs, rEvents] = await Promise.all([
+      fetch('/api/entries').then(r => r.json()),
+      fetch('/api/logs').then(r => r.json()),
+      fetch('/api/events').then(r => r.json())
+    ]);
+    rEntries.forEach(e => upsertEntry(e));
+    rLogs.forEach(l => upsertLog(l));
+    rEvents.forEach(ev => upsertEvent(ev));
+    updateCounts();
+    if (!connected) {
+      connected = true;
+      document.getElementById('connDot').classList.add('on');
+      document.getElementById('connLabel').textContent = 'Connected';
+      document.getElementById('statusWs').textContent = 'polling';
+    }
+  } catch {
+    connected = false;
     document.getElementById('connDot').classList.remove('on');
     document.getElementById('connLabel').textContent = 'Reconnecting…';
     document.getElementById('statusWs').textContent = 'disconnected';
-  };
-  sse.addEventListener('entries', (e) => {
-    try { JSON.parse(e.data).forEach(x => upsertEntry(x)); updateCounts(); } catch {}
-  });
-  sse.addEventListener('entry', (e) => {
-    try { upsertEntry(JSON.parse(e.data)); updateCounts(); } catch {}
-  });
-  sse.addEventListener('logs', (e) => {
-    try { JSON.parse(e.data).forEach(x => upsertLog(x)); updateCounts(); } catch {}
-  });
-  sse.addEventListener('log', (e) => {
-    try { upsertLog(JSON.parse(e.data)); updateCounts(); } catch {}
-  });
-  sse.addEventListener('events', (e) => {
-    try { JSON.parse(e.data).forEach(x => upsertEvent(x)); updateCounts(); } catch {}
-  });
-  sse.addEventListener('event', (e) => {
-    try { upsertEvent(JSON.parse(e.data)); updateCounts(); } catch {}
-  });
-  sse.addEventListener('clear', () => {
-    entries = []; selectedEntry = null; renderNetwork(); renderInsights(); updateCounts();
-  });
+  }
+}
+
+function connect() {
+  poll();
+  pollTimer = setInterval(poll, 1500);
 }
 
 function upsertEntry(e) {
