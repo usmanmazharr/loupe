@@ -253,32 +253,32 @@ function connect() {
 function handleMessage(msg) {
   switch (msg.type) {
     case 'entries': {
-      const arr = JSON.parse(msg.payload);
+      const arr = Array.isArray(msg.payload) ? msg.payload : JSON.parse(msg.payload);
       arr.forEach(e => upsertEntry(e));
       break;
     }
     case 'entry': {
-      const e = JSON.parse(msg.payload);
+      const e = (typeof msg.payload === 'object') ? msg.payload : JSON.parse(msg.payload);
       upsertEntry(e);
       break;
     }
     case 'logs': {
-      const arr = JSON.parse(msg.payload);
+      const arr = Array.isArray(msg.payload) ? msg.payload : JSON.parse(msg.payload);
       arr.forEach(l => upsertLog(l));
       break;
     }
     case 'log': {
-      const l = JSON.parse(msg.payload);
+      const l = (typeof msg.payload === 'object') ? msg.payload : JSON.parse(msg.payload);
       upsertLog(l);
       break;
     }
     case 'events': {
-      const arr = JSON.parse(msg.payload);
+      const arr = Array.isArray(msg.payload) ? msg.payload : JSON.parse(msg.payload);
       arr.forEach(ev => upsertEvent(ev));
       break;
     }
     case 'event': {
-      const ev = JSON.parse(msg.payload);
+      const ev = (typeof msg.payload === 'object') ? msg.payload : JSON.parse(msg.payload);
       upsertEvent(ev);
       break;
     }
