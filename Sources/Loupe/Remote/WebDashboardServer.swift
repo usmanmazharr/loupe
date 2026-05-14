@@ -127,8 +127,8 @@ actor WebDashboardServer {
         conn.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
             Task { [weak self] in
                 guard let self, let data else { return }
-                await self.handleHTTPRequest(data, on: conn)
-                if error == nil, !isComplete {
+                let upgraded = await self.handleHTTPRequest(data, on: conn)
+                if !upgraded, error == nil, !isComplete {
                     await self.receiveHTTP(on: conn)
                 }
             }
@@ -137,12 +137,14 @@ actor WebDashboardServer {
 
     // MARK: - HTTP Request Routing
 
-    private func handleHTTPRequest(_ data: Data, on conn: NWConnection) async {
-        guard let raw = String(data: data, encoding: .utf8) else { return }
+    /// Returns `true` if the connection was upgraded to WebSocket.
+    @discardableResult
+    private func handleHTTPRequest(_ data: Data, on conn: NWConnection) async -> Bool {
+        guard let raw = String(data: data, encoding: .utf8) else { return false }
         let lines = raw.components(separatedBy: "\r\n")
-        guard let requestLine = lines.first else { return }
+        guard let requestLine = lines.first else { return false }
         let parts = requestLine.split(separator: " ", maxSplits: 2)
-        guard parts.count >= 2 else { return }
+        guard parts.count >= 2 else { return false }
         let method = String(parts[0])
         let path = String(parts[1])
 
@@ -151,7 +153,7 @@ actor WebDashboardServer {
         if method == "GET" && path == "/ws" {
             if let wsKey = headers["sec-websocket-key"] {
                 await upgradeToWebSocket(conn, key: wsKey)
-                return
+                return true
             }
         }
 
@@ -202,6 +204,7 @@ actor WebDashboardServer {
         conn.send(content: response, completion: .contentProcessed { _ in
             conn.cancel()
         })
+        return false
     }
 
     private func parseHeaders(_ lines: [String]) -> [String: String] {
