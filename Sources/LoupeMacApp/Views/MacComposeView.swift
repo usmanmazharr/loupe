@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct MacComposeHeader: Identifiable, Equatable {
     let id = UUID()
@@ -24,12 +25,15 @@ struct MacComposeView: View {
     @State private var isSending: Bool = false
     @State private var response:  MacComposeResponse? = nil
     @State private var errorText: String? = nil
+    @State private var showCurlPaste: Bool = false
+    @State private var curlInput: String = ""
 
     private let methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                pasteCurlBar
                 urlSection
                 headersSection
                 bodySection
@@ -39,6 +43,80 @@ struct MacComposeView: View {
             }
             .padding(16)
         }
+        .sheet(isPresented: $showCurlPaste) {
+            pasteCurlSheet
+        }
+    }
+
+    // MARK: - Paste cURL
+
+    private var pasteCurlBar: some View {
+        Button {
+            curlInput = NSPasteboard.general.string(forType: .string) ?? ""
+            showCurlPaste = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal").font(.system(size: 11, weight: .semibold))
+                Text("Paste cURL").font(.system(size: 12, weight: .medium))
+                Spacer()
+                Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(Color.lpInk)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.lpAccentSoft, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var pasteCurlSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Paste cURL")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Button("Cancel") { showCurlPaste = false }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.lpFog)
+                Button("Import") {
+                    if let parsed = CURLParserMac.parse(curlInput) {
+                        apply(parsed)
+                        showCurlPaste = false
+                    } else {
+                        errorText = "Couldn't parse that as a curl command."
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(curlInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Text("Loupe will fill the URL, method, headers, and body from the curl command.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.lpFog)
+            TextEditor(text: $curlInput)
+                .font(.system(size: 11, design: .monospaced))
+                .frame(minHeight: 200)
+                .padding(6)
+                .background(Color.lpSurface, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.lpHairline, lineWidth: 1)
+                )
+        }
+        .padding(16)
+        .frame(width: 560, height: 360)
+    }
+
+    private func apply(_ parsed: CURLParserMac.Parsed) {
+        url = parsed.url
+        method = parsed.method
+        bodyText = parsed.body
+        var rows = parsed.headers.map { MacComposeHeader(key: $0.key, value: $0.value) }
+        if rows.isEmpty {
+            rows = [MacComposeHeader(key: "Content-Type", value: "application/json")]
+        }
+        headers = rows
+        errorText = nil
+        response = nil
     }
 
     // MARK: - URL + method

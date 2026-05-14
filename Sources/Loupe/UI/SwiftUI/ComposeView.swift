@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Header row
 
@@ -34,6 +37,8 @@ public struct ComposeView: View {
     @State private var isSending: Bool = false
     @State private var response:  ComposeResponse? = nil
     @State private var error:     String? = nil
+    @State private var showPasteCurl: Bool = false
+    @State private var curlInput: String = ""
 
     private let methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
@@ -60,8 +65,88 @@ public struct ComposeView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     LPBackButton { dismiss() }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        curlInput = UIPasteboard.general.string ?? ""
+                        showPasteCurl = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "terminal").font(.system(size: 13, weight: .semibold))
+                            Text("cURL").font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundStyle(Color.lpInk)
+                    }
+                }
+            }
+            .sheet(isPresented: $showPasteCurl) {
+                pasteCurlSheet
             }
         }
+    }
+
+    // MARK: - Paste cURL sheet
+
+    private var pasteCurlSheet: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Paste a curl command — Loupe will parse the URL, method, headers, and body into the compose form.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.lpFog)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+
+                Group {
+                    if #available(iOS 16, *) {
+                        TextEditor(text: $curlInput)
+                            .font(.system(size: 12, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                    } else {
+                        TextEditor(text: $curlInput)
+                            .font(.system(size: 12, design: .monospaced))
+                    }
+                }
+                .padding(8)
+                .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+
+                Spacer()
+            }
+            .background(Color.lpBackground.ignoresSafeArea())
+            .navigationTitle("Paste cURL")
+            .navigationBarTitleDisplayMode(.inline)
+            .lpNavigationBar()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    LPBackButton { showPasteCurl = false }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Import") {
+                        if let parsed = CURLParser.parse(curlInput) {
+                            apply(parsed)
+                            showPasteCurl = false
+                        } else {
+                            error = "Couldn't parse that as a curl command."
+                        }
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.lpAccent)
+                    .disabled(curlInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func apply(_ parsed: CURLParser.Parsed) {
+        url = parsed.url
+        method = parsed.method
+        bodyText = parsed.body
+        var rows = parsed.headers.map { ComposeHeader(key: $0.key, value: $0.value) }
+        if rows.isEmpty {
+            rows = [ComposeHeader(key: "Content-Type", value: "application/json")]
+        }
+        headers = rows
+        error = nil
+        response = nil
     }
 
     // MARK: - URL + method
