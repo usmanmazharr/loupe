@@ -22,6 +22,7 @@ public final class Loupe: @unchecked Sendable {
     private var shakeObserver: NSObjectProtocol?
     private var isLoggerPresented = false
     private let remoteServer = RemoteServer()
+    private var webDashboardServer: WebDashboardServer?
 
     // MARK: - Start / Stop
 
@@ -40,6 +41,11 @@ public final class Loupe: @unchecked Sendable {
         } else {
             print("[Loupe] Remote logging disabled (set remoteLoggingEnabled = true to enable).")
         }
+        if config.webDashboardEnabled {
+            let server = WebDashboardServer(port: config.webDashboardPort)
+            webDashboardServer = server
+            Task { await server.start() }
+        }
         isRunning = true
         print("[Loupe] Started — capturing network traffic.")
     }
@@ -49,6 +55,10 @@ public final class Loupe: @unchecked Sendable {
         disableShakeGesture()
         Task { @MainActor in self.hideFloatingButton() }
         Task { await remoteServer.stop() }
+        if let server = webDashboardServer {
+            Task { await server.stop() }
+            webDashboardServer = nil
+        }
         isRunning = false
     }
 
