@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
         case console = "Console"
         case events  = "Events"
         case insights = "Insights"
+        case mocks    = "Mocks"
         var id: String { rawValue }
         var systemImage: String {
             switch self {
@@ -19,6 +20,7 @@ final class AppState: ObservableObject {
             case .console:  return "text.alignleft"
             case .events:   return "chart.line.uptrend.xyaxis"
             case .insights: return "chart.bar.xaxis"
+            case .mocks:    return "server.rack"
             }
         }
     }

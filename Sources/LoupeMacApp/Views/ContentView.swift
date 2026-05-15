@@ -25,6 +25,7 @@ struct ContentView: View {
         case .console:  MacConsoleLogView()
         case .events:   MacAnalyticsEventsView()
         case .insights: MacInsightsView()
+        case .mocks:    MacMockServerView()
         }
     }
 
@@ -49,6 +50,9 @@ struct ContentView: View {
         case .insights:
             placeholder("chart.bar.xaxis",
                         "Live snapshot of all captured requests.")
+        case .mocks:
+            placeholder("server.rack",
+                        "Define mock endpoints and start the server.\nCall from Xcode via http://localhost:<port>/path.")
         }
     }
 
