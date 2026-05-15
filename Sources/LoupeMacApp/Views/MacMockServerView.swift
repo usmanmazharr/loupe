@@ -179,6 +179,17 @@ struct MacMockServerView: View {
             Spacer()
 
             Button {
+                let url = "http://localhost:\(store.port)\(ep.displayPath)"
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .foregroundStyle(Color.lpFog)
+            }
+            .buttonStyle(.plain)
+            .help("Copy http://localhost:\(store.port)\(ep.displayPath)")
+
+            Button {
                 store.toggleEnabled(ep)
             } label: {
                 Image(systemName: ep.isEnabled ? "checkmark.circle.fill" : "circle")
@@ -263,7 +274,7 @@ struct MockEndpointEditor: View {
     @State private var headers: [(key: String, value: String, id: UUID)] = [
         (key: "Content-Type", value: "application/json", id: UUID())
     ]
-    @State private var delay: Double = 0
+    @State private var delayText: String = "0"
 
     private let methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
     private let statusCodes = [200, 201, 204, 301, 302, 400, 401, 403, 404, 405, 409, 422, 429, 500, 502, 503]
@@ -324,7 +335,7 @@ struct MockEndpointEditor: View {
                         Text("Delay")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
-                        TextField("0", value: $delay, format: .number)
+                        TextField("0", text: $delayText)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                             .frame(width: 60)
@@ -416,7 +427,7 @@ struct MockEndpointEditor: View {
         method = ep.method
         statusCode = ep.statusCode
         responseBody = ep.responseBody
-        delay = ep.delay
+        delayText = ep.delay > 0 ? String(ep.delay) : "0"
         headers = ep.responseHeaders.map { (key: $0.key, value: $0.value, id: UUID()) }
         if headers.isEmpty {
             headers = [(key: "Content-Type", value: "application/json", id: UUID())]
@@ -430,7 +441,7 @@ struct MockEndpointEditor: View {
         ep.method = method
         ep.statusCode = statusCode
         ep.responseBody = responseBody
-        ep.delay = max(0, delay)
+        ep.delay = max(0, Double(delayText) ?? 0)
         ep.responseHeaders = headers.filter { !$0.key.isEmpty }.reduce(into: [:]) { $0[$1.key] = $1.value }
         onSave(ep)
     }
