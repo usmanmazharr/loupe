@@ -56,7 +56,7 @@ struct RequestListView: View {
         List {
             if !viewModel.pinnedEntries.isEmpty {
                 Section {
-                    ForEach(viewModel.pinnedEntries) { entry in
+                    ForEach(viewModel.pinnedEntries, id: \.effectiveID) { entry in
                         entryRow(entry)
                     }
                 } header: {
@@ -75,7 +75,7 @@ struct RequestListView: View {
                 if !unpinned.isEmpty {
                     Section {
                         if !collapsedCategories.contains(group.category) {
-                            ForEach(unpinned) { entry in
+                            ForEach(unpinned, id: \.effectiveID) { entry in
                                 entryRow(entry)
                             }
                         }
@@ -100,7 +100,7 @@ struct RequestListView: View {
             }
         }
         .listStyle(.plain)
-        .animation(.default, value: viewModel.filteredEntries.map(\.id))
+        .animation(.default, value: viewModel.filteredEntries.map(\.effectiveID))
     }
 
     // MARK: - Flat list
@@ -109,7 +109,7 @@ struct RequestListView: View {
         List {
             if !viewModel.pinnedEntries.isEmpty {
                 Section {
-                    ForEach(viewModel.pinnedEntries) { entry in
+                    ForEach(viewModel.pinnedEntries, id: \.effectiveID) { entry in
                         entryRow(entry)
                     }
                 } header: {
@@ -123,12 +123,12 @@ struct RequestListView: View {
                 }
             }
 
-            ForEach(viewModel.unpinnedEntries) { entry in
+            ForEach(viewModel.unpinnedEntries, id: \.effectiveID) { entry in
                 entryRow(entry)
             }
         }
         .listStyle(.plain)
-        .animation(.default, value: viewModel.filteredEntries.map(\.id))
+        .animation(.default, value: viewModel.filteredEntries.map(\.effectiveID))
     }
 
     // MARK: - Empty state

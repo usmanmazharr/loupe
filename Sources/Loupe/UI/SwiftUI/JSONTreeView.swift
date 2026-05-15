@@ -4,11 +4,13 @@ import SwiftUI
 struct JSONTreeView: View {
 
     let node: JSONNode
+    let searchTerm: String
     @State private var expanded: Bool
 
-    init(node: JSONNode, initiallyExpanded: Bool = true) {
+    init(node: JSONNode, initiallyExpanded: Bool = true, searchTerm: String = "") {
         self.node = node
-        self._expanded = State(initialValue: initiallyExpanded)
+        self.searchTerm = searchTerm
+        self._expanded = State(initialValue: searchTerm.isEmpty ? initiallyExpanded : Self.nodeContainsMatch(node, term: searchTerm))
     }
 
     var body: some View {
@@ -25,7 +27,6 @@ struct JSONTreeView: View {
     @ViewBuilder
     private var rowContent: some View {
         HStack(spacing: 4) {
-            // Expand/collapse toggle for containers
             if !node.isLeaf {
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
@@ -36,22 +37,27 @@ struct JSONTreeView: View {
                 Spacer().frame(width: 16)
             }
 
-            // Key
             if let key = node.key {
-                Text(key.hasPrefix("[") ? key : "\"\(key)\":")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Color.jsonKey)
+                highlightedKeyText(key)
             }
 
-            // Value / summary
-            Text(valueSummary)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(valueColor)
+            highlightedValueText
                 .lineLimit(1)
 
             Spacer()
 
-            // Copy button for leaf nodes
+            if !node.isLeaf, !searchTerm.isEmpty {
+                let count = Self.countMatches(in: node, term: searchTerm)
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange, in: Capsule())
+                }
+            }
+
             if node.isLeaf {
                 Button {
                     ExportManager.copyToClipboard(node.typeLabel)
@@ -79,13 +85,86 @@ struct JSONTreeView: View {
         case .object(_, _, let kids), .array(_, _, let kids):
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(kids) { child in
-                    JSONTreeView(node: child, initiallyExpanded: depth(child) < 2)
+                    JSONTreeView(node: child, initiallyExpanded: depth(child) < 2, searchTerm: searchTerm)
                         .padding(.leading, 16)
                 }
             }
         default:
             EmptyView()
         }
+    }
+
+    // MARK: - Highlighted Text
+
+    private func highlightedKeyText(_ key: String) -> Text {
+        let display = key.hasPrefix("[") ? key : "\"\(key)\":"
+        if searchTerm.isEmpty { return Text(display).font(.system(size: 12, design: .monospaced)).foregroundColor(.jsonKey) }
+        return Self.highlight(display, term: searchTerm, baseColor: .jsonKey)
+    }
+
+    private var highlightedValueText: some View {
+        let summary = valueSummary
+        if searchTerm.isEmpty {
+            return Self.highlight(summary, term: "", baseColor: valueColor)
+                .font(.system(size: 12, design: .monospaced))
+        }
+        return Self.highlight(summary, term: searchTerm, baseColor: valueColor)
+            .font(.system(size: 12, design: .monospaced))
+    }
+
+    static func highlight(_ source: String, term: String, baseColor: Color) -> Text {
+        guard !term.isEmpty else { return Text(source).foregroundColor(baseColor) }
+        let lower = source.lowercased()
+        let lowerTerm = term.lowercased()
+        var result = Text("")
+        var searchStart = lower.startIndex
+
+        while let range = lower.range(of: lowerTerm, range: searchStart..<lower.endIndex) {
+            let before = String(source[searchStart..<range.lowerBound])
+            if !before.isEmpty {
+                result = result + Text(before).foregroundColor(baseColor)
+            }
+            let match = String(source[range])
+            result = result + Text(match).foregroundColor(.black).bold()
+                .background(RoundedRectangle(cornerRadius: 2).fill(Color.yellow.opacity(0.7)))
+            searchStart = range.upperBound
+        }
+        let remaining = String(source[searchStart...])
+        if !remaining.isEmpty {
+            result = result + Text(remaining).foregroundColor(baseColor)
+        }
+        return result
+    }
+
+    // MARK: - Match counting
+
+    static func countMatches(in node: JSONNode, term: String) -> Int {
+        guard !term.isEmpty else { return 0 }
+        let lowerTerm = term.lowercased()
+        return countMatchesRecursive(node, lowerTerm: lowerTerm)
+    }
+
+    private static func countMatchesRecursive(_ node: JSONNode, lowerTerm: String) -> Int {
+        var count = 0
+        if let key = node.key, key.lowercased().contains(lowerTerm) { count += 1 }
+
+        switch node {
+        case .string(_, _, let v):
+            if v.lowercased().contains(lowerTerm) { count += 1 }
+        case .number(_, _, let v):
+            if String(v).lowercased().contains(lowerTerm) { count += 1 }
+        case .bool(_, _, let v):
+            if String(v).lowercased().contains(lowerTerm) { count += 1 }
+        case .object(_, _, let kids), .array(_, _, let kids):
+            for child in kids { count += countMatchesRecursive(child, lowerTerm: lowerTerm) }
+        case .null:
+            if "null".contains(lowerTerm) { count += 1 }
+        }
+        return count
+    }
+
+    static func nodeContainsMatch(_ node: JSONNode, term: String) -> Bool {
+        countMatches(in: node, term: term) > 0
     }
 
     // MARK: - Helpers

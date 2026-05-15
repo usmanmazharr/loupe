@@ -105,9 +105,10 @@ public final class NetworkEntry: Identifiable, ObservableObject, Codable, @unche
         method: String,
         requestHeaders: [String: String] = [:],
         requestBody: Data? = nil,
-        sessionID: String = UUID().uuidString
+        sessionID: String = UUID().uuidString,
+        id: UUID = UUID()
     ) {
-        self.id = UUID()
+        self.id = id
         self.sessionID = sessionID
         self.url = url
         self.method = method.uppercased()

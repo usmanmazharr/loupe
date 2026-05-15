@@ -81,6 +81,38 @@ pre.body-block { background:var(--surface); border-radius:8px; padding:12px; fon
 .copy-btn { background:var(--surface); border:1px solid var(--hairline); color:var(--fog); font-size:10px; padding:3px 8px; border-radius:6px; cursor:pointer; font-family:var(--font); }
 .copy-btn:hover { color:var(--ink); border-color:var(--fog); }
 
+/* Detail search */
+.detail-search { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--hairline); flex-shrink:0; }
+.detail-search input { background:var(--surface); border:1px solid var(--hairline); border-radius:6px; padding:5px 10px; color:var(--ink); font-size:11px; font-family:var(--mono); flex:1; outline:none; }
+.detail-search input:focus { border-color:var(--accent); }
+.match-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:50px; flex-shrink:0; }
+
+/* JSON tree */
+.tree-section { margin-bottom:8px; background:var(--surface); border-radius:8px; overflow:hidden; }
+.tree-section-header { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; user-select:none; }
+.tree-section-header:hover { background:rgba(255,255,255,0.03); }
+.tree-chevron { font-size:10px; color:var(--fog); width:12px; flex-shrink:0; transition:transform .15s; }
+.tree-section-icon { font-size:12px; color:var(--accent); }
+.tree-section-title { font-size:12px; font-weight:600; color:var(--ink); }
+.tree-section-count { font-size:10px; color:var(--fog); }
+.tree-section-match { font-size:9px; font-weight:700; color:#fff; background:var(--warning); padding:1px 6px; border-radius:50px; }
+.tree-section-body { padding:4px 12px 8px 32px; }
+.tree-kv { display:flex; gap:6px; padding:3px 0; font-family:var(--mono); font-size:11px; align-items:flex-start; border-bottom:1px solid var(--hairline); }
+.tree-kv:last-child { border-bottom:none; }
+.tree-kv-key { color:var(--accent); flex-shrink:0; }
+.tree-kv-val { color:var(--fog); word-break:break-all; flex:1; }
+.json-tree { font-family:var(--mono); font-size:11px; }
+.json-node { padding:1px 0; }
+.json-toggle { cursor:pointer; color:var(--fog); display:inline-block; width:14px; font-size:10px; user-select:none; }
+.json-key { color:#C792EA; }
+.json-str { color:#C3E88D; }
+.json-num { color:#F78C6C; }
+.json-bool { color:#FFCB6B; }
+.json-null { color:#546E7A; }
+.json-bracket { color:var(--fog); }
+.json-match-badge { font-size:9px; font-weight:700; color:#fff; background:var(--warning); padding:0 5px; border-radius:50px; margin-left:4px; }
+mark { background:#E0AC4A88; color:#fff; border-radius:2px; padding:0 1px; }
+
 /* Console */
 .log-row { display:flex; gap:8px; padding:6px 20px; border-bottom:1px solid var(--hairline); font-family:var(--mono); font-size:11px; align-items:flex-start; }
 .log-level { font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; flex-shrink:0; text-transform:uppercase; min-width:50px; text-align:center; }
@@ -173,10 +205,13 @@ pre.body-block { background:var(--surface); border-radius:8px; padding:12px; fon
     </div>
     <div class="detail-tabs" id="detailTabs">
       <div class="detail-tab active" data-dtab="overview">Overview</div>
-      <div class="detail-tab" data-dtab="reqheaders">Req Headers</div>
-      <div class="detail-tab" data-dtab="reqbody">Req Body</div>
-      <div class="detail-tab" data-dtab="resheaders">Res Headers</div>
-      <div class="detail-tab" data-dtab="resbody">Res Body</div>
+      <div class="detail-tab" data-dtab="request">Request</div>
+      <div class="detail-tab" data-dtab="response">Response</div>
+    </div>
+    <div class="detail-search" id="detailSearchBar" style="display:none">
+      <span style="color:var(--fog);font-size:12px">&#128269;</span>
+      <input type="text" id="detailSearchInput" placeholder="Search keys, values…">
+      <span class="match-badge" id="detailMatchBadge" style="display:none"></span>
     </div>
     <div class="detail-body" id="detailBody"></div>
   </div>
@@ -222,11 +257,13 @@ let selectedEntry = null;
 let activeTab = 'network';
 let activeDetailTab = 'overview';
 let searchQuery = '';
+let detailSearch = '';
 let methodFilter = 'ALL';
 let levelFilters = new Set();
 let providerFilter = 'ALL';
 let pollTimer = null;
 let connected = false;
+let collapsedSections = new Set();
 
 // ── Polling ──
 async function poll() {
@@ -326,8 +363,18 @@ document.getElementById('detailTabs').addEventListener('click', (e) => {
   const tab = e.target.closest('.detail-tab');
   if (!tab) return;
   activeDetailTab = tab.dataset.dtab;
+  detailSearch = '';
+  document.getElementById('detailSearchInput').value = '';
+  collapsedSections.clear();
   document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
+  const searchBar = document.getElementById('detailSearchBar');
+  searchBar.style.display = (activeDetailTab === 'request' || activeDetailTab === 'response') ? 'flex' : 'none';
+  renderDetail();
+});
+
+document.getElementById('detailSearchInput').addEventListener('input', (e) => {
+  detailSearch = e.target.value.toLowerCase();
   renderDetail();
 });
 
@@ -447,25 +494,67 @@ function renderDetail() {
 
   const body = document.getElementById('detailBody');
   switch (activeDetailTab) {
-    case 'overview':
-      body.innerHTML = renderOverview(e);
-      break;
-    case 'reqheaders':
-      body.innerHTML = renderHeaders(e.requestHeaders, 'Request Headers');
-      break;
-    case 'reqbody':
-      body.innerHTML = renderBody(e.requestBody, 'Request Body');
-      break;
-    case 'resheaders':
-      body.innerHTML = renderHeaders(e.responseHeaders, 'Response Headers');
-      break;
-    case 'resbody':
-      body.innerHTML = renderBody(e.responseBody, 'Response Body');
-      break;
+    case 'overview': body.innerHTML = renderOverview(e); break;
+    case 'request':  body.innerHTML = renderRequestTree(e); break;
+    case 'response': body.innerHTML = renderResponseTree(e); break;
   }
-  setupCopyBtn();
+  setupTreeToggles();
+  setupCopyBtns();
+  updateMatchBadge();
   const curlBtn = document.getElementById('copyCurlBtn');
   if (curlBtn) curlBtn.onclick = () => copyText(buildCurl(e));
+}
+
+function updateMatchBadge() {
+  const badge = document.getElementById('detailMatchBadge');
+  if (!detailSearch) { badge.style.display = 'none'; return; }
+  const count = countAllMatches();
+  badge.style.display = 'inline-block';
+  badge.textContent = count + ' match' + (count === 1 ? '' : 'es');
+  badge.style.background = count > 0 ? 'var(--warning)' : 'var(--mist)';
+  badge.style.color = '#fff';
+}
+
+function countAllMatches() {
+  if (!selectedEntry || !detailSearch) return 0;
+  const e = selectedEntry;
+  let c = 0;
+  if (activeDetailTab === 'request') {
+    c += countStr(e.url, detailSearch);
+    c += countStr(e.method, detailSearch);
+    c += countKV(e.requestHeaders, detailSearch);
+    c += countKV(e.queryParameters, detailSearch);
+    c += countBodyMatches(e.requestBody, detailSearch);
+  } else {
+    c += countStr(e.url, detailSearch);
+    if (e.statusCode) c += countStr(String(e.statusCode), detailSearch);
+    c += countKV(e.responseHeaders, detailSearch);
+    c += countBodyMatches(e.responseBody, detailSearch);
+  }
+  return c;
+}
+
+function countStr(s, term) { if (!s) return 0; let c=0,i=s.toLowerCase().indexOf(term); while(i>=0){c++;i=s.toLowerCase().indexOf(term,i+1);} return c; }
+function countKV(obj, term) { if (!obj) return 0; let c=0; for (const [k,v] of Object.entries(obj)){c+=countStr(k,term);c+=countStr(v,term);} return c; }
+function countBodyMatches(data, term) {
+  const text = prettyJSON(data);
+  if (!text) return 0;
+  return countStr(text, term);
+}
+
+function highlightText(s) {
+  if (!detailSearch || !s) return escapeHTML(s||'');
+  const esc = escapeHTML(s);
+  const lower = esc.toLowerCase();
+  const term = escapeHTML(detailSearch);
+  let result = '', i = 0;
+  while (i < esc.length) {
+    const idx = lower.indexOf(term, i);
+    if (idx < 0) { result += esc.slice(i); break; }
+    result += esc.slice(i, idx) + '<mark>' + esc.slice(idx, idx + term.length) + '</mark>';
+    i = idx + term.length;
+  }
+  return result;
 }
 
 function buildCurl(e) {
@@ -476,6 +565,143 @@ function buildCurl(e) {
   return cmd;
 }
 
+// ── Tree sections ──
+function treeSection(id, icon, title, count, matchCount, bodyHTML) {
+  const collapsed = collapsedSections.has(id);
+  const chevron = collapsed ? '&#9654;' : '&#9660;';
+  let header = '<div class="tree-section"><div class="tree-section-header" data-section="' + id + '">' +
+    '<span class="tree-chevron">' + chevron + '</span>' +
+    '<span class="tree-section-icon">' + icon + '</span>' +
+    '<span class="tree-section-title">' + escapeHTML(title) + '</span>';
+  if (count !== null) header += '<span class="tree-section-count">(' + count + ')</span>';
+  if (matchCount > 0) header += '<span class="tree-section-match">' + matchCount + '</span>';
+  header += '</div>';
+  if (!collapsed) header += '<div class="tree-section-body">' + bodyHTML + '</div>';
+  header += '</div>';
+  return header;
+}
+
+function kvTreeHTML(obj) {
+  if (!obj || Object.keys(obj).length === 0) return '<span style="color:var(--mist);font-size:11px">(empty)</span>';
+  return Object.entries(obj).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v]) =>
+    '<div class="tree-kv"><span class="tree-kv-key">' + highlightText(k) + ':</span><span class="tree-kv-val">' + highlightText(v) + '</span></div>'
+  ).join('');
+}
+
+function bodyTreeHTML(data) {
+  const text = prettyJSON(data);
+  if (!text) return '<span style="color:var(--mist);font-size:11px">(empty)</span>';
+  try {
+    const obj = JSON.parse(text);
+    return '<div class="json-tree">' + jsonNodeHTML(obj, null, true) + '</div>';
+  } catch {
+    return '<pre class="body-block">' + highlightText(text) + '</pre>';
+  }
+}
+
+function jsonNodeHTML(val, key, expanded) {
+  const keyStr = key !== null ? '<span class="json-key">' + highlightText('"'+key+'"') + '</span>: ' : '';
+  if (val === null) return '<div class="json-node">' + keyStr + '<span class="json-null">null</span></div>';
+  if (typeof val === 'boolean') return '<div class="json-node">' + keyStr + '<span class="json-bool">' + val + '</span></div>';
+  if (typeof val === 'number') return '<div class="json-node">' + keyStr + '<span class="json-num">' + highlightText(String(val)) + '</span></div>';
+  if (typeof val === 'string') return '<div class="json-node">' + keyStr + '<span class="json-str">' + highlightText('"'+val.substring(0,200)+(val.length>200?'…':'')+'"') + '</span></div>';
+  if (Array.isArray(val)) {
+    const id = 'jtree_' + Math.random().toString(36).substr(2,8);
+    const mc = detailSearch ? countJSONMatches(val) : 0;
+    const badge = mc > 0 ? '<span class="json-match-badge">' + mc + '</span>' : '';
+    const shouldExpand = expanded || (detailSearch && mc > 0);
+    let html = '<div class="json-node">' + '<span class="json-toggle" data-tree="' + id + '">' + (shouldExpand?'&#9660;':'&#9654;') + '</span>' + keyStr + '<span class="json-bracket">[</span> <span style="color:var(--fog);font-size:10px">' + val.length + ' items</span>' + badge;
+    html += '<div id="' + id + '" style="padding-left:16px;' + (shouldExpand?'':'display:none') + '">';
+    val.forEach((item, i) => { html += jsonNodeHTML(item, '[' + i + ']', false); });
+    html += '</div><span class="json-bracket">]</span></div>';
+    return html;
+  }
+  if (typeof val === 'object') {
+    const id = 'jtree_' + Math.random().toString(36).substr(2,8);
+    const keys = Object.keys(val);
+    const mc = detailSearch ? countJSONMatches(val) : 0;
+    const badge = mc > 0 ? '<span class="json-match-badge">' + mc + '</span>' : '';
+    const shouldExpand = expanded || (detailSearch && mc > 0);
+    let html = '<div class="json-node">' + '<span class="json-toggle" data-tree="' + id + '">' + (shouldExpand?'&#9660;':'&#9654;') + '</span>' + keyStr + '<span class="json-bracket">{</span> <span style="color:var(--fog);font-size:10px">' + keys.length + ' fields</span>' + badge;
+    html += '<div id="' + id + '" style="padding-left:16px;' + (shouldExpand?'':'display:none') + '">';
+    keys.sort().forEach(k => { html += jsonNodeHTML(val[k], k, false); });
+    html += '</div><span class="json-bracket">}</span></div>';
+    return html;
+  }
+  return '<div class="json-node">' + keyStr + escapeHTML(String(val)) + '</div>';
+}
+
+function countJSONMatches(val) {
+  if (!detailSearch) return 0;
+  const str = JSON.stringify(val);
+  return countStr(str, detailSearch);
+}
+
+function setupTreeToggles() {
+  document.querySelectorAll('.tree-section-header').forEach(h => {
+    h.addEventListener('click', () => {
+      const sid = h.dataset.section;
+      if (collapsedSections.has(sid)) collapsedSections.delete(sid); else collapsedSections.add(sid);
+      renderDetail();
+    });
+  });
+  document.querySelectorAll('.json-toggle').forEach(t => {
+    t.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const target = document.getElementById(t.dataset.tree);
+      if (!target) return;
+      const visible = target.style.display !== 'none';
+      target.style.display = visible ? 'none' : 'block';
+      t.innerHTML = visible ? '&#9654;' : '&#9660;';
+    });
+  });
+}
+
+function setupCopyBtns() {
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.dataset.copy));
+  });
+}
+
+// ── Render: Request tree ──
+function renderRequestTree(e) {
+  let html = '';
+  html += treeSection('url', '&#128279;', 'URL', null, detailSearch ? countStr(e.url,detailSearch) : 0,
+    '<div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div>');
+  html += treeSection('method', '&#8593;', 'Method', null, detailSearch ? countStr(e.method,detailSearch) : 0,
+    '<div style="font-family:var(--mono);font-size:11px">' + highlightText(e.method) + '</div>');
+  const reqH = e.requestHeaders || {};
+  html += treeSection('headers', '&#9776;', 'Headers', Object.keys(reqH).length, detailSearch ? countKV(reqH,detailSearch) : 0, kvTreeHTML(reqH));
+  const qp = e.queryParameters || {};
+  if (Object.keys(qp).length > 0) {
+    html += treeSection('query', '?', 'Query Parameters', Object.keys(qp).length, detailSearch ? countKV(qp,detailSearch) : 0, kvTreeHTML(qp));
+  }
+  html += treeSection('body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.requestBody,detailSearch) : 0, bodyTreeHTML(e.requestBody));
+  return html;
+}
+
+// ── Render: Response tree ──
+function renderResponseTree(e) {
+  let html = '';
+  html += treeSection('url', '&#128279;', 'URL', null, detailSearch ? countStr(e.url,detailSearch) : 0,
+    '<div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div>');
+  if (e.statusCode) {
+    const sc = statusColorCSS(e.statusCode);
+    html += treeSection('status', '#', 'Status', null, detailSearch ? countStr(String(e.statusCode),detailSearch) : 0,
+      '<span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)));
+  }
+  const resH = e.responseHeaders || {};
+  html += treeSection('headers', '&#9776;', 'Headers', Object.keys(resH).length, detailSearch ? countKV(resH,detailSearch) : 0, kvTreeHTML(resH));
+  html += treeSection('body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.responseBody,detailSearch) : 0, bodyTreeHTML(e.responseBody));
+  return html;
+}
+
+function httpStatusText(code) {
+  const map = {200:'OK',201:'Created',204:'No Content',301:'Moved',302:'Found',304:'Not Modified',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',405:'Method Not Allowed',408:'Timeout',422:'Unprocessable',429:'Too Many Requests',500:'Internal Server Error',502:'Bad Gateway',503:'Service Unavailable',504:'Gateway Timeout'};
+  return map[code] || '';
+}
+
+// ── Overview ──
 function renderOverview(e) {
   let html = '<div class="detail-section"><div class="detail-section-title">General</div><table class="kv-table">';
   html += kvRow('URL', e.url);
@@ -485,42 +711,18 @@ function renderOverview(e) {
   html += kvRow('Response Size', fmtBytes(e.responseSize));
   if (e.error) html += kvRow('Error', e.error.localizedDescription);
   html += '</table></div>';
-
   if (e.timing) {
     html += '<div class="detail-section"><div class="detail-section-title">Timing</div><table class="kv-table">';
     html += kvRow('Started', fmtTime(e.timing.startDate));
-    if (e.timing.connectDate) html += kvRow('Connected', fmtTime(e.timing.connectDate));
-    if (e.timing.firstByteDate) html += kvRow('First Byte', fmtTime(e.timing.firstByteDate));
     if (e.timing.endDate) html += kvRow('Completed', fmtTime(e.timing.endDate));
     html += '</table></div>';
   }
-
   if (Object.keys(e.queryParameters || {}).length > 0) {
     html += '<div class="detail-section"><div class="detail-section-title">Query Parameters</div><table class="kv-table">';
     for (const [k, v] of Object.entries(e.queryParameters)) { html += kvRow(k, v); }
     html += '</table></div>';
   }
   return html;
-}
-
-function renderHeaders(headers, title) {
-  if (!headers || Object.keys(headers).length === 0) {
-    return '<div class="empty" style="height:200px"><div class="empty-icon">📋</div>No headers</div>';
-  }
-  let html = '<div class="detail-section"><div class="detail-section-title">' + escapeHTML(title) + '</div><table class="kv-table">';
-  for (const [k, v] of Object.entries(headers).sort()) { html += kvRow(k, v); }
-  html += '</table></div>';
-  return html;
-}
-
-function renderBody(data, title) {
-  const text = prettyJSON(data);
-  if (!text) return '<div class="empty" style="height:200px"><div class="empty-icon">📄</div>No body</div>';
-  return '<div class="detail-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div class="detail-section-title" style="margin:0">' + escapeHTML(title) + '</div><button class="copy-btn" id="copyBodyBtn">Copy</button></div><pre class="body-block" id="bodyPre">' + escapeHTML(text) + '</pre></div>';
-}
-function setupCopyBtn() {
-  const btn = document.getElementById('copyBodyBtn');
-  if (btn) btn.addEventListener('click', () => copyText(document.getElementById('bodyPre').textContent));
 }
 
 function kvRow(k, v) {

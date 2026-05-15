@@ -265,7 +265,7 @@ final class LogStore: @unchecked Sendable {
                 ? sqlite3_column_int(stmt, 17) != 0
                 : false
 
-            let entry = NetworkEntry(url: url, method: method, requestHeaders: reqHeaders, requestBody: reqBody)
+            let entry = NetworkEntry(url: url, method: method, requestHeaders: reqHeaders, requestBody: reqBody, id: id)
             entry.id2              = id
             entry.responseHeaders  = respHeaders
             entry.responseBody     = respBody

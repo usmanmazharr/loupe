@@ -144,6 +144,11 @@ public actor LogManager {
     }
 
     private func refreshPublisher() {
-        subject.send(LogStore.shared.fetchAll().filter { shouldCapture(entry: $0) })
+        var seen = Set<UUID>()
+        let entries = LogStore.shared.fetchAll().filter { entry in
+            guard shouldCapture(entry: entry) else { return false }
+            return seen.insert(entry.effectiveID).inserted
+        }
+        subject.send(entries)
     }
 }

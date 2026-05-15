@@ -9,6 +9,9 @@ struct RequestDetailView: View {
     @State private var bodySearch: String = ""
     @State private var copied: Bool = false
 
+    // Collapsible section state
+    @State private var expandedSections: Set<String> = ["url", "headers", "query", "body", "status"]
+
     enum Tab: String, CaseIterable, Identifiable {
         case overview = "Overview"
         case request  = "Request"
@@ -34,7 +37,7 @@ struct RequestDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.lpCardBackground)
+                .background(Color.tfCardBackground)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
@@ -45,12 +48,12 @@ struct RequestDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
-            .background(Color.lpCardBackground)
+            .background(Color.tfCardBackground)
 
             Divider()
 
             if selectedTab == .request || selectedTab == .response {
-                searchBar
+                searchBarWithCount
                 Divider()
             }
 
@@ -58,8 +61,8 @@ struct RequestDetailView: View {
                 Group {
                     switch selectedTab {
                     case .overview:  overviewTab
-                    case .request:   requestTab
-                    case .response:  responseTab
+                    case .request:   requestTreeTab
+                    case .response:  responseTreeTab
                     case .timeline:  RequestTimelineView(entry: entry)
                     case .curl:      curlTab
                     }
@@ -75,12 +78,70 @@ struct RequestDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar { toolbarItems }
-        .lpNavigationBar()
+        .tfNavigationBar()
     }
 
-    // MARK: - Search bar
+    // MARK: - Search bar with match count
 
-    private var searchBar: some View {
+    private var totalMatchCount: Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        if selectedTab == .request {
+            return requestMatchCount
+        } else {
+            return responseMatchCount
+        }
+    }
+
+    private var requestMatchCount: Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        let term = bodySearch.lowercased()
+        var count = 0
+        // URL
+        if entry.url.absoluteString.lowercased().contains(term) { count += 1 }
+        // Method
+        if entry.method.lowercased().contains(term) { count += 1 }
+        // Headers
+        for (k, v) in entry.requestHeaders {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        // Query params
+        for (k, v) in entry.queryParameters {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        // Body
+        if let data = entry.requestBody, let tree = JSONFormatter.parse(data) {
+            count += JSONTreeView.countMatches(in: tree, term: bodySearch)
+        } else if let data = entry.requestBody, let str = String(data: data, encoding: .utf8) {
+            count += str.lowercased().countOccurrences(of: term)
+        }
+        return count
+    }
+
+    private var responseMatchCount: Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        let term = bodySearch.lowercased()
+        var count = 0
+        // URL
+        if entry.url.absoluteString.lowercased().contains(term) { count += 1 }
+        // Status
+        if let code = entry.statusCode, String(code).contains(term) { count += 1 }
+        // Headers
+        for (k, v) in entry.responseHeaders {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        // Body
+        if let data = entry.responseBody, let tree = JSONFormatter.parse(data) {
+            count += JSONTreeView.countMatches(in: tree, term: bodySearch)
+        } else if let data = entry.responseBody, let str = String(data: data, encoding: .utf8) {
+            count += str.lowercased().countOccurrences(of: term)
+        }
+        return count
+    }
+
+    private var searchBarWithCount: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Search keys, values…", text: $bodySearch)
@@ -88,6 +149,15 @@ struct RequestDetailView: View {
                 .autocorrectionDisabled()
                 .font(.system(size: 14, design: .monospaced))
             if !bodySearch.isEmpty {
+                Text("\(totalMatchCount) match\(totalMatchCount == 1 ? "" : "es")")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(totalMatchCount > 0 ? Color.orange : Color.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        (totalMatchCount > 0 ? Color.orange : Color.secondary).opacity(0.12),
+                        in: Capsule()
+                    )
                 Button {
                     bodySearch = ""
                 } label: {
@@ -97,7 +167,7 @@ struct RequestDetailView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.lpCardBackground)
+        .background(Color.tfCardBackground)
     }
 
     // MARK: - Header
@@ -169,7 +239,372 @@ struct RequestDetailView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Tabs
+    // MARK: - Request Tree Tab (Postman-style)
+
+    private var requestTreeTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // URL section
+            treeSection(id: "url", title: "URL", icon: "link", count: nil) {
+                highlightedMonoText(entry.url.absoluteString)
+                    .textSelection(.enabled)
+            }
+
+            // Method
+            treeSection(id: "method", title: "Method", icon: "arrow.up.right", count: nil) {
+                highlightedMonoText(entry.method)
+            }
+
+            // Headers section
+            treeSection(
+                id: "headers",
+                title: "Headers",
+                icon: "list.bullet.rectangle",
+                count: entry.requestHeaders.count
+            ) {
+                keyValueTree(entry.requestHeaders)
+            }
+
+            // Query Parameters
+            if !entry.queryParameters.isEmpty {
+                treeSection(
+                    id: "query",
+                    title: "Query Parameters",
+                    icon: "questionmark.circle",
+                    count: entry.queryParameters.count
+                ) {
+                    keyValueTree(entry.queryParameters)
+                }
+            }
+
+            // Body section
+            bodyTreeSection(data: entry.requestBody, contentType: entry.requestContentType, label: "Body")
+        }
+    }
+
+    // MARK: - Response Tree Tab (Postman-style)
+
+    private var responseTreeTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // URL
+            treeSection(id: "url", title: "URL", icon: "link", count: nil) {
+                highlightedMonoText(entry.url.absoluteString)
+                    .textSelection(.enabled)
+            }
+
+            // Status
+            if let code = entry.statusCode {
+                treeSection(id: "status", title: "Status", icon: "number", count: nil) {
+                    HStack(spacing: 8) {
+                        StatusBadge(code: code, status: entry.status)
+                        highlightedMonoText("\(code) \(HTTPURLResponse.localizedString(forStatusCode: code))")
+                    }
+                }
+            }
+
+            // Headers
+            treeSection(
+                id: "headers",
+                title: "Headers",
+                icon: "list.bullet.rectangle",
+                count: entry.responseHeaders.count
+            ) {
+                keyValueTree(entry.responseHeaders)
+            }
+
+            // Body
+            if entry.responseBody != nil || entry.status.isTerminal {
+                bodyTreeSection(data: entry.responseBody, contentType: entry.responseContentType, label: "Body")
+            } else {
+                treeSection(id: "body", title: "Body", icon: "doc.text", count: nil) {
+                    HStack(spacing: 8) {
+                        ProgressView().scaleEffect(0.8)
+                        Text("Waiting for response…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Tree Section
+
+    private func treeSection<Content: View>(
+        id: String,
+        title: String,
+        icon: String,
+        count: Int?,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let isExpanded = expandedSections.contains(id)
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded { expandedSections.remove(id) }
+                    else { expandedSections.insert(id) }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.blue)
+
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    if let count {
+                        Text("(\(count))")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if !bodySearch.isEmpty {
+                        let sectionMatches = sectionMatchCount(id: id)
+                        if sectionMatches > 0 {
+                            Text("\(sectionMatches)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.orange, in: Capsule())
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    content()
+                }
+                .padding(.leading, 32)
+                .padding(.trailing, 12)
+                .padding(.bottom, 8)
+            }
+        }
+        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func sectionMatchCount(id: String) -> Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        let term = bodySearch.lowercased()
+
+        if selectedTab == .request {
+            switch id {
+            case "url":
+                return entry.url.absoluteString.lowercased().countOccurrences(of: term)
+            case "method":
+                return entry.method.lowercased().contains(term) ? 1 : 0
+            case "headers":
+                return countKVMatches(entry.requestHeaders, term: term)
+            case "query":
+                return countKVMatches(entry.queryParameters, term: term)
+            case "body":
+                return bodyMatchCount(data: entry.requestBody, term: term)
+            default: return 0
+            }
+        } else {
+            switch id {
+            case "url":
+                return entry.url.absoluteString.lowercased().countOccurrences(of: term)
+            case "status":
+                if let code = entry.statusCode { return String(code).contains(term) ? 1 : 0 }
+                return 0
+            case "headers":
+                return countKVMatches(entry.responseHeaders, term: term)
+            case "body":
+                return bodyMatchCount(data: entry.responseBody, term: term)
+            default: return 0
+            }
+        }
+    }
+
+    private func countKVMatches(_ dict: [String: String], term: String) -> Int {
+        var count = 0
+        for (k, v) in dict {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        return count
+    }
+
+    private func bodyMatchCount(data: Data?, term: String) -> Int {
+        guard let data else { return 0 }
+        if let tree = JSONFormatter.parse(data) {
+            return JSONTreeView.countMatches(in: tree, term: bodySearch)
+        }
+        if let str = String(data: data, encoding: .utf8) {
+            return str.lowercased().countOccurrences(of: term)
+        }
+        return 0
+    }
+
+    // MARK: - Key-Value Tree
+
+    private func keyValueTree(_ dict: [String: String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(dict.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                HStack(alignment: .top, spacing: 4) {
+                    highlightedText(key + ":", baseColor: .jsonKey)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    highlightedText(value, baseColor: .secondary)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(3)
+                    Spacer()
+                    Button {
+                        ExportManager.copyToClipboard(value)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 3)
+                if key != dict.sorted(by: { $0.key < $1.key }).last?.key {
+                    Divider()
+                }
+            }
+        }
+    }
+
+    // MARK: - Body Tree Section
+
+    @ViewBuilder
+    private func bodyTreeSection(data: Data?, contentType: ContentType, label: String) -> some View {
+        let formatted = BodyFormatter.format(data: data, contentType: contentType)
+        switch formatted {
+        case .json(let raw, let tree):
+            treeSection(id: "body", title: label, icon: "curlybraces", count: nil) {
+                if let tree {
+                    JSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
+                } else {
+                    highlightedMonoText(raw)
+                        .textSelection(.enabled)
+                }
+
+                HStack {
+                    Spacer()
+                    Button {
+                        ExportManager.copyToClipboard(raw)
+                        withAnimation { copied = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                            withAnimation { copied = false }
+                        }
+                    } label: {
+                        Label(copied ? "Copied" : "Copy",
+                              systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.blue.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        case .xml(let str):
+            treeSection(id: "body", title: label, icon: "chevron.left.forwardslash.chevron.right", count: nil) {
+                highlightedMonoText(str)
+                    .textSelection(.enabled)
+                copyButton(str)
+            }
+        case .text(let str):
+            treeSection(id: "body", title: label, icon: "doc.text", count: nil) {
+                highlightedMonoText(str)
+                    .textSelection(.enabled)
+                copyButton(str)
+            }
+        case .image(_, let sub):
+            treeSection(id: "body", title: label, icon: "photo", count: nil) {
+                Text("Image (\(sub))")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+        case .pdf:
+            treeSection(id: "body", title: label, icon: "doc.richtext", count: nil) {
+                Text("PDF document")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+        case .binary(let desc):
+            treeSection(id: "body", title: label, icon: "doc", count: nil) {
+                Text(desc)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+        case .empty:
+            treeSection(id: "body", title: label, icon: "doc", count: nil) {
+                Text("(empty)")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func copyButton(_ text: String) -> some View {
+        HStack {
+            Spacer()
+            Button {
+                ExportManager.copyToClipboard(text)
+                withAnimation { copied = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    withAnimation { copied = false }
+                }
+            } label: {
+                Label(copied ? "Copied" : "Copy",
+                      systemImage: copied ? "checkmark" : "doc.on.doc")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.blue.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Highlighted text helpers
+
+    private func highlightedMonoText(_ source: String) -> Text {
+        if bodySearch.isEmpty {
+            return Text(source)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.primary)
+        }
+        return highlightedText(source, baseColor: .primary)
+            .font(.system(size: 12, design: .monospaced))
+    }
+
+    private func highlightedText(_ source: String, baseColor: Color) -> Text {
+        guard !bodySearch.isEmpty else { return Text(source).foregroundColor(baseColor) }
+        var attributed = AttributedString(source)
+        let lowerSource = source.lowercased()
+        let lowerTerm   = bodySearch.lowercased()
+        var searchStart = lowerSource.startIndex
+        while let range = lowerSource.range(of: lowerTerm, range: searchStart ..< lowerSource.endIndex) {
+            if let attrRange = Range(range, in: attributed) {
+                attributed[attrRange].backgroundColor = .yellow.opacity(0.6)
+                attributed[attrRange].foregroundColor = .black
+            }
+            searchStart = range.upperBound
+        }
+        return Text(attributed).foregroundColor(baseColor)
+    }
+
+    // MARK: - Overview Tab (unchanged)
 
     private var overviewTab: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -200,47 +635,16 @@ struct RequestDetailView: View {
         }
     }
 
-    private var requestTab: some View {
-        let formatted = entry.formattedRequestText
-        return blockSection(title: "Request", text: formatted)
-    }
-
-    private var responseTab: some View {
-        if let _ = entry.responseBody {
-            return AnyView(blockSection(title: "Response", text: entry.formattedResponseText))
-        } else if entry.status.isTerminal {
-            return AnyView(blockSection(title: "Response", text: entry.formattedResponseText))
-        } else {
-            return AnyView(
-                infoSection(title: "Response") {
-                    HStack(spacing: 8) {
-                        ProgressView().scaleEffect(0.8)
-                        Text("Waiting for response…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            )
-        }
-    }
-
     private var curlTab: some View {
         let curl = CURLGenerator.generate(from: entry)
-        return blockSection(title: "cURL Command", text: curl)
-    }
-
-    // MARK: - Reusable sections
-
-    private func blockSection(title: String, text: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(title)
+                Text("CURL COMMAND")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
                 Spacer()
                 Button {
-                    ExportManager.copyToClipboard(text)
+                    ExportManager.copyToClipboard(curl)
                     withAnimation { copied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         withAnimation { copied = false }
@@ -256,34 +660,18 @@ struct RequestDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
-
-            highlightedText(text, term: bodySearch)
+            Text(curl)
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func highlightedText(_ source: String, term: String) -> Text {
-        guard !term.isEmpty else { return Text(source) }
-        var attributed = AttributedString(source)
-        let lowerSource = source.lowercased()
-        let lowerTerm   = term.lowercased()
-        var searchStart = lowerSource.startIndex
-        while let range = lowerSource.range(of: lowerTerm, range: searchStart ..< lowerSource.endIndex) {
-            if let attrRange = Range(range, in: attributed) {
-                attributed[attrRange].backgroundColor = .yellow.opacity(0.6)
-                attributed[attrRange].foregroundColor = .black
-            }
-            searchStart = range.upperBound
-        }
-        return Text(attributed)
-    }
+    // MARK: - Reusable sections
 
     private func infoSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -296,7 +684,7 @@ struct RequestDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.lpCardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func infoRow(_ key: String, value: String) -> some View {
@@ -320,7 +708,7 @@ struct RequestDetailView: View {
                     Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
                     Text("Back").font(.system(size: 15, weight: .medium))
                 }
-                .foregroundStyle(Color.lpInk)
+                .foregroundStyle(Color.tfInk)
             }
         }
         ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -400,5 +788,20 @@ extension NetworkEntry {
         let body = bodyString(responseBody)
         out += "RESPONSE: \n\(body.isEmpty ? "<no body>" : body)"
         return out
+    }
+}
+
+// MARK: - String occurrence counting
+
+extension String {
+    func countOccurrences(of term: String) -> Int {
+        guard !term.isEmpty else { return 0 }
+        var count = 0
+        var searchStart = startIndex
+        while let range = range(of: term, range: searchStart..<endIndex) {
+            count += 1
+            searchStart = range.upperBound
+        }
+        return count
     }
 }
