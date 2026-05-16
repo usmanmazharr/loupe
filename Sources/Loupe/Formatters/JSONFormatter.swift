@@ -1,6 +1,5 @@
 import Foundation
 
-/// Parses JSON data into a tree of `JSONNode` values for syntax-highlighted rendering.
 public indirect enum JSONNode: Identifiable {
     case object(id: UUID, key: String?, children: [JSONNode])
     case array(id: UUID, key: String?, children: [JSONNode])
@@ -52,11 +51,8 @@ public indirect enum JSONNode: Identifiable {
     }
 }
 
-// MARK: - JSONFormatter
-
 public enum JSONFormatter {
 
-    /// Parses raw `Data` into a `JSONNode` tree. Returns nil for non-JSON data.
     public static func parse(_ data: Data) -> JSONNode? {
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
             return nil
@@ -64,29 +60,57 @@ public enum JSONFormatter {
         return node(from: obj, key: nil, path: "root")
     }
 
-    /// Parses a JSON string into a `JSONNode` tree.
     public static func parse(_ string: String) -> JSONNode? {
         guard let data = string.data(using: .utf8) else { return nil }
         return parse(data)
     }
 
-    // MARK: Private
+    private static let preferredKeyOrder = [
+        "statuscode", "status", "code",
+        "message", "msg", "description",
+        "data", "body", "result", "results", "response", "payload",
+        "error", "errors", "errorMessage"
+    ]
+
+    private static func keyPriority(_ key: String) -> Int {
+        let lower = key.lowercased()
+        if let idx = preferredKeyOrder.firstIndex(of: lower) { return idx }
+        return preferredKeyOrder.count
+    }
+
+    private static func sortedKeys(_ dict: [String: Any]) -> [(String, Any)] {
+        dict.sorted { a, b in
+            let pa = keyPriority(a.key)
+            let pb = keyPriority(b.key)
+            if pa != pb { return pa < pb }
+            return a.key < b.key
+        }
+    }
 
     private static func deterministicUUID(from path: String) -> UUID {
-        let hash = path.utf8.reduce(into: [UInt8](repeating: 0, count: 16)) { result, byte in
-            for i in 0..<16 {
-                result[i] = result[i] &+ byte &* UInt8(truncatingIfNeeded: i &+ 1)
-            }
+        var h: UInt64 = 0xcbf29ce484222325
+        for byte in path.utf8 {
+            h ^= UInt64(byte)
+            h &*= 0x100000001b3
         }
-        return UUID(uuid: (hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7],
-                           hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]))
+        let h2 = h &* 0x517cc1b727220a95
+        return UUID(uuid: (
+            UInt8(truncatingIfNeeded: h), UInt8(truncatingIfNeeded: h >> 8),
+            UInt8(truncatingIfNeeded: h >> 16), UInt8(truncatingIfNeeded: h >> 24),
+            UInt8(truncatingIfNeeded: h >> 32), UInt8(truncatingIfNeeded: h >> 40),
+            UInt8(truncatingIfNeeded: h >> 48), UInt8(truncatingIfNeeded: h >> 56),
+            UInt8(truncatingIfNeeded: h2), UInt8(truncatingIfNeeded: h2 >> 8),
+            UInt8(truncatingIfNeeded: h2 >> 16), UInt8(truncatingIfNeeded: h2 >> 24),
+            UInt8(truncatingIfNeeded: h2 >> 32), UInt8(truncatingIfNeeded: h2 >> 40),
+            UInt8(truncatingIfNeeded: h2 >> 48), UInt8(truncatingIfNeeded: h2 >> 56)
+        ))
     }
 
     private static func node(from value: Any, key: String?, path: String) -> JSONNode {
         let id = deterministicUUID(from: path)
         switch value {
         case let dict as [String: Any]:
-            let children = dict.map { node(from: $0.value, key: $0.key, path: "\(path).\($0.key)") }
+            let children = sortedKeys(dict).map { node(from: $0.1, key: $0.0, path: "\(path).\($0.0)") }
             return .object(id: id, key: key, children: children)
 
         case let array as [Any]:

@@ -403,7 +403,7 @@ document.getElementById('searchNext').addEventListener('click', () => {
 function getMatchingSections() {
   if (!selectedEntry || !detailSearch) return [];
   const e = selectedEntry;
-  const ids = ['req-url','req-method','req-headers','req-query','req-body','res-status','res-headers','res-body'];
+  const ids = ['req-url','req-method','req-headers','req-query','req-body','res-status','res-body'];
   return ids.filter(id => sectionMatchCount(id, e) > 0);
 }
 
@@ -416,7 +416,6 @@ function sectionMatchCount(id, e) {
     case 'req-query': return countKV(e.queryParameters, detailSearch);
     case 'req-body': return countBodyMatches(e.requestBody, detailSearch);
     case 'res-status': return e.statusCode ? countStr(String(e.statusCode), detailSearch) : 0;
-    case 'res-headers': return countKV(e.responseHeaders, detailSearch);
     case 'res-body': return countBodyMatches(e.responseBody, detailSearch);
     default: return 0;
   }
@@ -694,11 +693,21 @@ function jsonNodeHTML(val, key, expanded) {
     const shouldExpand = expanded || (detailSearch && mc > 0);
     let html = '<div class="json-node">' + '<span class="json-toggle" data-tree="' + id + '">' + (shouldExpand?'&#9660;':'&#9654;') + '</span>' + keyStr + '<span class="json-bracket">{</span> <span style="color:var(--fog);font-size:10px">' + keys.length + ' fields</span>' + badge;
     html += '<div id="' + id + '" style="padding-left:16px;' + (shouldExpand?'':'display:none') + '">';
-    keys.forEach(k => { html += jsonNodeHTML(val[k], k, false); });
+    sortKeys(keys).forEach(k => { html += jsonNodeHTML(val[k], k, false); });
     html += '</div><span class="json-bracket">}</span></div>';
     return html;
   }
   return '<div class="json-node">' + keyStr + escapeHTML(String(val)) + '</div>';
+}
+
+const preferredKeyOrder = ['statuscode','status','code','message','msg','description','data','body','result','results','response','payload','error','errors','errormessage'];
+function sortKeys(keys) {
+  return keys.slice().sort((a,b) => {
+    const pa = preferredKeyOrder.indexOf(a.toLowerCase()), pb = preferredKeyOrder.indexOf(b.toLowerCase());
+    const ia = pa < 0 ? preferredKeyOrder.length : pa, ib = pb < 0 ? preferredKeyOrder.length : pb;
+    if (ia !== ib) return ia - ib;
+    return a.localeCompare(b);
+  });
 }
 
 function countJSONMatches(val) {
@@ -769,7 +778,6 @@ function renderResponseTree(e) {
   let resMatchCount = 0;
   if (detailSearch) {
     if (e.statusCode) resMatchCount += countStr(String(e.statusCode), detailSearch);
-    resMatchCount += countKV(e.responseHeaders, detailSearch);
     resMatchCount += countBodyMatches(e.responseBody, detailSearch);
   }
   const badge = resMatchCount > 0 ? '<span class="tree-section-match">' + resMatchCount + '</span>' : '';
@@ -780,13 +788,9 @@ function renderResponseTree(e) {
   html += '<div class="tree-section-body">';
   if (e.statusCode) {
     const sc = statusColorCSS(e.statusCode);
-    html += '<div class="field-row"><span class="field-label">Status</span><span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)) + '</div>';
+    html += '<div class="field-row"><span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)) + '</div>';
   }
-  const resH = e.responseHeaders || {};
-  if (Object.keys(resH).length > 0) {
-    html += '<div class="field-row"><span class="field-label">Headers</span>' + kvTreeHTML(resH) + '</div>';
-  }
-  html += '<div class="field-row"><span class="field-label">Body</span>' + bodyTreeHTML(e.responseBody) + '</div>';
+  html += bodyTreeHTML(e.responseBody);
   html += '</div></div>';
   return html;
 }
