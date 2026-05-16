@@ -103,6 +103,8 @@ pre.body-block { background:var(--surface); border-radius:8px; padding:12px; fon
 .tree-kv:last-child { border-bottom:none; }
 .tree-kv-key { color:var(--accent); flex-shrink:0; }
 .tree-kv-val { color:var(--fog); word-break:break-all; flex:1; }
+.field-row { margin-bottom:10px; }
+.field-label { display:block; font-size:10px; font-weight:600; color:var(--fog); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
 .json-tree { font-family:var(--mono); font-size:11px; }
 .json-node { padding:1px 0; }
 .json-toggle { cursor:pointer; color:var(--fog); display:inline-block; width:14px; font-size:10px; user-select:none; }
@@ -731,34 +733,61 @@ function setupCopyBtns() {
   });
 }
 
-// ── Render: Request tree ──
+// ── Render: Request section (combined) ──
 function renderRequestTree(e) {
-  let html = '<div style="font-size:11px;font-weight:700;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Request</div>';
-  html += treeSection('req-url', '&#128279;', 'URL', null, detailSearch ? countStr(e.url,detailSearch) : 0,
-    '<div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div>');
-  html += treeSection('req-method', '&#8593;', 'Method', null, detailSearch ? countStr(e.method,detailSearch) : 0,
-    '<div style="font-family:var(--mono);font-size:11px">' + highlightText(e.method) + '</div>');
+  let reqMatchCount = 0;
+  if (detailSearch) {
+    reqMatchCount += countStr(e.url, detailSearch);
+    reqMatchCount += countStr(e.method, detailSearch);
+    reqMatchCount += countKV(e.requestHeaders, detailSearch);
+    reqMatchCount += countKV(e.queryParameters, detailSearch);
+    reqMatchCount += countBodyMatches(e.requestBody, detailSearch);
+  }
+  const badge = reqMatchCount > 0 ? '<span class="tree-section-match">' + reqMatchCount + '</span>' : '';
+  let html = '<div class="tree-section" data-section="request"><div class="tree-section-header" data-section="request">' +
+    '<span class="tree-chevron">&#9660;</span>' +
+    '<span class="tree-section-icon">&#8593;</span>' +
+    '<span class="tree-section-title">Request</span>' + badge + '</div>';
+  html += '<div class="tree-section-body">';
+  html += '<div class="field-row"><span class="field-label">URL</span><div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div></div>';
+  html += '<div class="field-row"><span class="field-label">Method</span><div style="font-family:var(--mono);font-size:11px">' + highlightText(e.method) + '</div></div>';
   const reqH = e.requestHeaders || {};
-  html += treeSection('req-headers', '&#9776;', 'Headers', Object.keys(reqH).length, detailSearch ? countKV(reqH,detailSearch) : 0, kvTreeHTML(reqH));
+  if (Object.keys(reqH).length > 0) {
+    html += '<div class="field-row"><span class="field-label">Headers</span>' + kvTreeHTML(reqH) + '</div>';
+  }
   const qp = e.queryParameters || {};
   if (Object.keys(qp).length > 0) {
-    html += treeSection('req-query', '?', 'Query Parameters', Object.keys(qp).length, detailSearch ? countKV(qp,detailSearch) : 0, kvTreeHTML(qp));
+    html += '<div class="field-row"><span class="field-label">Query Parameters</span>' + kvTreeHTML(qp) + '</div>';
   }
-  html += treeSection('req-body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.requestBody,detailSearch) : 0, bodyTreeHTML(e.requestBody));
+  html += '<div class="field-row"><span class="field-label">Body</span>' + bodyTreeHTML(e.requestBody) + '</div>';
+  html += '</div></div>';
   return html;
 }
 
-// ── Render: Response tree ──
+// ── Render: Response section (combined) ──
 function renderResponseTree(e) {
-  let html = '<div style="font-size:11px;font-weight:700;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Response</div>';
+  let resMatchCount = 0;
+  if (detailSearch) {
+    if (e.statusCode) resMatchCount += countStr(String(e.statusCode), detailSearch);
+    resMatchCount += countKV(e.responseHeaders, detailSearch);
+    resMatchCount += countBodyMatches(e.responseBody, detailSearch);
+  }
+  const badge = resMatchCount > 0 ? '<span class="tree-section-match">' + resMatchCount + '</span>' : '';
+  let html = '<div class="tree-section" data-section="response"><div class="tree-section-header" data-section="response">' +
+    '<span class="tree-chevron">&#9660;</span>' +
+    '<span class="tree-section-icon">&#8595;</span>' +
+    '<span class="tree-section-title">Response</span>' + badge + '</div>';
+  html += '<div class="tree-section-body">';
   if (e.statusCode) {
     const sc = statusColorCSS(e.statusCode);
-    html += treeSection('res-status', '#', 'Status', null, detailSearch ? countStr(String(e.statusCode),detailSearch) : 0,
-      '<span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)));
+    html += '<div class="field-row"><span class="field-label">Status</span><span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)) + '</div>';
   }
   const resH = e.responseHeaders || {};
-  html += treeSection('res-headers', '&#9776;', 'Headers', Object.keys(resH).length, detailSearch ? countKV(resH,detailSearch) : 0, kvTreeHTML(resH));
-  html += treeSection('res-body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.responseBody,detailSearch) : 0, bodyTreeHTML(e.responseBody));
+  if (Object.keys(resH).length > 0) {
+    html += '<div class="field-row"><span class="field-label">Headers</span>' + kvTreeHTML(resH) + '</div>';
+  }
+  html += '<div class="field-row"><span class="field-label">Body</span>' + bodyTreeHTML(e.responseBody) + '</div>';
+  html += '</div></div>';
   return html;
 }
 
