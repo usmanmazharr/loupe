@@ -6,6 +6,7 @@ struct MacRequestDetailView: View {
     @EnvironmentObject private var appState: AppState
     @State private var tab: Tab = .overview
     @State private var bodySearch: String = ""
+    @State private var currentMatchIndex: Int = 0
     @State private var expandedSections: Set<String> = ["url", "method", "headers", "query", "body", "status"]
 
     enum Tab: String, CaseIterable {
@@ -47,18 +48,23 @@ struct MacRequestDetailView: View {
                 Divider()
             }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    switch tab {
-                    case .overview:  overviewTab
-                    case .request:   requestTreeTab
-                    case .response:  responseTreeTab
-                    case .curl:      curlTab
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        switch tab {
+                        case .overview:  overviewTab
+                        case .request:   requestTreeTab
+                        case .response:  responseTreeTab
+                        case .curl:      curlTab
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .onChange(of: currentMatchIndex) { _ in
+                    scrollToCurrentMatch(proxy: proxy)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -111,22 +117,77 @@ struct MacRequestDetailView: View {
         return count
     }
 
+    private var matchingSectionIDs: [String] {
+        guard !bodySearch.isEmpty else { return [] }
+        let allIDs: [String]
+        if tab == .request {
+            allIDs = ["url", "method", "headers", "query", "body"]
+        } else {
+            allIDs = ["url", "status", "headers", "body"]
+        }
+        return allIDs.filter { sectionMatchCount(id: $0) > 0 }
+    }
+
+    private func scrollToCurrentMatch(proxy: ScrollViewProxy) {
+        let sections = matchingSectionIDs
+        guard !sections.isEmpty else { return }
+        let idx = currentMatchIndex % sections.count
+        let target = sections[idx]
+        if !expandedSections.contains(target) {
+            expandedSections.insert(target)
+        }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo("section-\(target)", anchor: .top)
+        }
+    }
+
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Search in \(tab == .request ? "request" : "response")…", text: $bodySearch)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12, design: .monospaced))
+                .onChange(of: bodySearch) { _ in currentMatchIndex = 0 }
             if !bodySearch.isEmpty {
-                Text("\(totalMatchCount) match\(totalMatchCount == 1 ? "" : "es")")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(totalMatchCount > 0 ? Color.orange : Color.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        (totalMatchCount > 0 ? Color.orange : Color.secondary).opacity(0.12),
-                        in: Capsule()
-                    )
+                let count = totalMatchCount
+                let sections = matchingSectionIDs
+                if count > 0 {
+                    Text("\(sections.isEmpty ? 0 : (currentMatchIndex % sections.count) + 1) of \(count)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.12), in: Capsule())
+
+                    Button {
+                        if !sections.isEmpty {
+                            currentMatchIndex = (currentMatchIndex - 1 + sections.count) % sections.count
+                        }
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        if !sections.isEmpty {
+                            currentMatchIndex = (currentMatchIndex + 1) % sections.count
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text("0 results")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                }
                 Button {
                     bodySearch = ""
                 } label: {
@@ -328,6 +389,7 @@ struct MacRequestDetailView: View {
             }
         }
         .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
+        .id("section-\(id)")
     }
 
     private func sectionMatchCount(id: String) -> Int {

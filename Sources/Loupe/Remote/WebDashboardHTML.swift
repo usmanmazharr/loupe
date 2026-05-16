@@ -86,6 +86,8 @@ pre.body-block { background:var(--surface); border-radius:8px; padding:12px; fon
 .detail-search input { background:var(--surface); border:1px solid var(--hairline); border-radius:6px; padding:5px 10px; color:var(--ink); font-size:11px; font-family:var(--mono); flex:1; outline:none; }
 .detail-search input:focus { border-color:var(--accent); }
 .match-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:50px; flex-shrink:0; }
+.search-nav-btn { background:none; border:1px solid var(--hairline); border-radius:4px; color:var(--warning); cursor:pointer; font-size:10px; padding:2px 6px; flex-shrink:0; }
+.search-nav-btn:hover { background:var(--surface); }
 
 /* JSON tree */
 .tree-section { margin-bottom:8px; background:var(--surface); border-radius:8px; overflow:hidden; }
@@ -212,6 +214,8 @@ mark { background:#E0AC4A88; color:#fff; border-radius:2px; padding:0 1px; }
       <span style="color:var(--fog);font-size:12px">&#128269;</span>
       <input type="text" id="detailSearchInput" placeholder="Search keys, values…">
       <span class="match-badge" id="detailMatchBadge" style="display:none"></span>
+      <button class="search-nav-btn" id="searchPrev" style="display:none" title="Previous match">&#9650;</button>
+      <button class="search-nav-btn" id="searchNext" style="display:none" title="Next match">&#9660;</button>
     </div>
     <div class="detail-body" id="detailBody"></div>
   </div>
@@ -258,6 +262,7 @@ let activeTab = 'network';
 let activeDetailTab = 'overview';
 let searchQuery = '';
 let detailSearch = '';
+let currentMatchSectionIdx = 0;
 let methodFilter = 'ALL';
 let levelFilters = new Set();
 let providerFilter = 'ALL';
@@ -375,8 +380,65 @@ document.getElementById('detailTabs').addEventListener('click', (e) => {
 
 document.getElementById('detailSearchInput').addEventListener('input', (e) => {
   detailSearch = e.target.value.toLowerCase();
+  currentMatchSectionIdx = 0;
   renderDetail();
 });
+document.getElementById('searchPrev').addEventListener('click', () => {
+  const sections = getMatchingSections();
+  if (!sections.length) return;
+  currentMatchSectionIdx = (currentMatchSectionIdx - 1 + sections.length) % sections.length;
+  updateMatchBadge();
+  scrollToMatchSection(sections[currentMatchSectionIdx]);
+});
+document.getElementById('searchNext').addEventListener('click', () => {
+  const sections = getMatchingSections();
+  if (!sections.length) return;
+  currentMatchSectionIdx = (currentMatchSectionIdx + 1) % sections.length;
+  updateMatchBadge();
+  scrollToMatchSection(sections[currentMatchSectionIdx]);
+});
+
+function getMatchingSections() {
+  if (!selectedEntry || !detailSearch) return [];
+  const e = selectedEntry;
+  const ids = activeDetailTab === 'request'
+    ? ['url','method','headers','query','body']
+    : ['url','status','headers','body'];
+  return ids.filter(id => sectionMatchCount(id, e) > 0);
+}
+
+function sectionMatchCount(id, e) {
+  if (!detailSearch) return 0;
+  if (activeDetailTab === 'request') {
+    switch(id) {
+      case 'url': return countStr(e.url, detailSearch);
+      case 'method': return countStr(e.method, detailSearch);
+      case 'headers': return countKV(e.requestHeaders, detailSearch);
+      case 'query': return countKV(e.queryParameters, detailSearch);
+      case 'body': return countBodyMatches(e.requestBody, detailSearch);
+      default: return 0;
+    }
+  } else {
+    switch(id) {
+      case 'url': return countStr(e.url, detailSearch);
+      case 'status': return e.statusCode ? countStr(String(e.statusCode), detailSearch) : 0;
+      case 'headers': return countKV(e.responseHeaders, detailSearch);
+      case 'body': return countBodyMatches(e.responseBody, detailSearch);
+      default: return 0;
+    }
+  }
+}
+
+function scrollToMatchSection(sectionId) {
+  if (collapsedSections.has(sectionId)) {
+    collapsedSections.delete(sectionId);
+    renderDetail();
+  }
+  setTimeout(() => {
+    const el = document.querySelector('.tree-section[data-section="' + sectionId + '"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
+}
 
 // ── Helpers ──
 function methodColorCSS(m) {
@@ -507,11 +569,24 @@ function renderDetail() {
 
 function updateMatchBadge() {
   const badge = document.getElementById('detailMatchBadge');
-  if (!detailSearch) { badge.style.display = 'none'; return; }
+  const prevBtn = document.getElementById('searchPrev');
+  const nextBtn = document.getElementById('searchNext');
+  if (!detailSearch) { badge.style.display='none'; prevBtn.style.display='none'; nextBtn.style.display='none'; return; }
   const count = countAllMatches();
+  const sections = getMatchingSections();
   badge.style.display = 'inline-block';
-  badge.textContent = count + ' match' + (count === 1 ? '' : 'es');
-  badge.style.background = count > 0 ? 'var(--warning)' : 'var(--mist)';
+  if (count > 0) {
+    const pos = sections.length > 0 ? (currentMatchSectionIdx % sections.length) + 1 : 0;
+    badge.textContent = pos + ' of ' + count;
+    badge.style.background = 'var(--warning)';
+    prevBtn.style.display = 'inline-block';
+    nextBtn.style.display = 'inline-block';
+  } else {
+    badge.textContent = '0 results';
+    badge.style.background = 'var(--mist)';
+    prevBtn.style.display = 'none';
+    nextBtn.style.display = 'none';
+  }
   badge.style.color = '#fff';
 }
 
@@ -569,7 +644,7 @@ function buildCurl(e) {
 function treeSection(id, icon, title, count, matchCount, bodyHTML) {
   const collapsed = collapsedSections.has(id);
   const chevron = collapsed ? '&#9654;' : '&#9660;';
-  let header = '<div class="tree-section"><div class="tree-section-header" data-section="' + id + '">' +
+  let header = '<div class="tree-section" data-section="' + id + '"><div class="tree-section-header" data-section="' + id + '">' +
     '<span class="tree-chevron">' + chevron + '</span>' +
     '<span class="tree-section-icon">' + icon + '</span>' +
     '<span class="tree-section-title">' + escapeHTML(title) + '</span>';

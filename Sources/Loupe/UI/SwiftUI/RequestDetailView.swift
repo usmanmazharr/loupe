@@ -8,6 +8,7 @@ struct RequestDetailView: View {
     @State private var selectedTab: Tab = .overview
     @State private var bodySearch: String = ""
     @State private var copied: Bool = false
+    @State private var currentMatchIndex: Int = 0
 
     // Collapsible section state
     @State private var expandedSections: Set<String> = ["url", "headers", "query", "body", "status"]
@@ -57,21 +58,26 @@ struct RequestDetailView: View {
                 Divider()
             }
 
-            ScrollView {
-                Group {
-                    switch selectedTab {
-                    case .overview:  overviewTab
-                    case .request:   requestTreeTab
-                    case .response:  responseTreeTab
-                    case .timeline:  RequestTimelineView(entry: entry)
-                    case .curl:      curlTab
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Group {
+                        switch selectedTab {
+                        case .overview:  overviewTab
+                        case .request:   requestTreeTab
+                        case .response:  responseTreeTab
+                        case .timeline:  RequestTimelineView(entry: entry)
+                        case .curl:      curlTab
+                        }
                     }
+                    .id(selectedTab)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 40)
                 }
-                .id(selectedTab)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 40)
+                .onChange(of: currentMatchIndex) { _ in
+                    scrollToCurrentMatch(proxy: proxy)
+                }
             }
         }
         .navigationTitle("Loupe")
@@ -141,6 +147,30 @@ struct RequestDetailView: View {
         return count
     }
 
+    private var matchingSectionIDs: [String] {
+        guard !bodySearch.isEmpty else { return [] }
+        let allIDs: [String]
+        if selectedTab == .request {
+            allIDs = ["url", "method", "headers", "query", "body"]
+        } else {
+            allIDs = ["url", "status", "headers", "body"]
+        }
+        return allIDs.filter { sectionMatchCount(id: $0) > 0 }
+    }
+
+    private func scrollToCurrentMatch(proxy: ScrollViewProxy) {
+        let sections = matchingSectionIDs
+        guard !sections.isEmpty else { return }
+        let idx = currentMatchIndex % sections.count
+        let target = sections[idx]
+        if !expandedSections.contains(target) {
+            expandedSections.insert(target)
+        }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo("section-\(target)", anchor: .top)
+        }
+    }
+
     private var searchBarWithCount: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -148,16 +178,45 @@ struct RequestDetailView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(size: 14, design: .monospaced))
+                .onChange(of: bodySearch) { _ in currentMatchIndex = 0 }
             if !bodySearch.isEmpty {
-                Text("\(totalMatchCount) match\(totalMatchCount == 1 ? "" : "es")")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(totalMatchCount > 0 ? Color.orange : Color.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        (totalMatchCount > 0 ? Color.orange : Color.secondary).opacity(0.12),
-                        in: Capsule()
-                    )
+                let count = totalMatchCount
+                let sections = matchingSectionIDs
+                if count > 0 {
+                    Text("\(sections.isEmpty ? 0 : (currentMatchIndex % sections.count) + 1) of \(count)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.12), in: Capsule())
+
+                    Button {
+                        if !sections.isEmpty {
+                            currentMatchIndex = (currentMatchIndex - 1 + sections.count) % sections.count
+                        }
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+
+                    Button {
+                        if !sections.isEmpty {
+                            currentMatchIndex = (currentMatchIndex + 1) % sections.count
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+                } else {
+                    Text("0 results")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                }
                 Button {
                     bodySearch = ""
                 } label: {
@@ -394,6 +453,7 @@ struct RequestDetailView: View {
             }
         }
         .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 10))
+        .id("section-\(id)")
     }
 
     private func sectionMatchCount(id: String) -> Int {
