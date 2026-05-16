@@ -298,126 +298,86 @@ struct MockEndpointEditor: View {
                     .disabled(path.trimmingCharacters(in: .whitespaces).isEmpty)
             }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    // Method + Path
+            Form {
+                Section("Endpoint") {
                     HStack(spacing: 8) {
-                        Picker("", selection: $method) {
+                        Picker("Method", selection: $method) {
                             ForEach(methods, id: \.self) { Text($0).tag($0) }
                         }
                         .pickerStyle(.menu)
-                        .labelsHidden()
-                        .frame(width: 110)
+                        .frame(width: 130)
 
-                        TextField("/users/me", text: $path)
-                            .textFieldStyle(.roundedBorder)
+                        TextField("Path", text: $path)
                             .font(.system(size: 12, design: .monospaced))
                     }
 
-                    // Status Code
-                    HStack(spacing: 8) {
-                        Text("Status Code")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Picker("", selection: $statusCode) {
-                            ForEach(statusCodes, id: \.self) { code in
-                                Text("\(code) \(MockLocalServer.httpStatusText(code))")
-                                    .tag(code)
-                            }
+                    Picker("Status Code", selection: $statusCode) {
+                        ForEach(statusCodes, id: \.self) { code in
+                            Text("\(code) \(MockLocalServer.httpStatusText(code))")
+                                .tag(code)
                         }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .frame(width: 220)
                     }
+                    .pickerStyle(.menu)
 
-                    // Delay
-                    HStack(spacing: 8) {
-                        Text("Delay")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        TextField("0", text: $delayText)
-                            .textFieldStyle(.roundedBorder)
+                    HStack {
+                        TextField("Delay (seconds)", text: $delayText)
                             .font(.system(size: 11, design: .monospaced))
-                            .frame(width: 60)
                         Text("seconds")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
+                }
 
-                    Divider()
+                Section("Response Headers") {
+                    ForEach(Array(headers.enumerated()), id: \.element.id) { idx, _ in
+                        HStack(spacing: 6) {
+                            TextField("Key", text: Binding(
+                                get: { headers[idx].key },
+                                set: { headers[idx].key = $0 }
+                            ))
+                            .font(.system(size: 11, design: .monospaced))
 
-                    // Response Headers
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("RESPONSE HEADERS")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
+                            TextField("Value", text: Binding(
+                                get: { headers[idx].value },
+                                set: { headers[idx].value = $0 }
+                            ))
+                            .font(.system(size: 11, design: .monospaced))
+
                             Button {
-                                headers.append((key: "", value: "", id: UUID()))
+                                headers.remove(at: idx)
                             } label: {
-                                Label("Add", systemImage: "plus.circle.fill")
-                                    .font(.system(size: 11))
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
                         }
-                        ForEach(Array(headers.enumerated()), id: \.element.id) { idx, _ in
-                            HStack(spacing: 6) {
-                                TextField("Key", text: Binding(
-                                    get: { headers[idx].key },
-                                    set: { headers[idx].key = $0 }
-                                ))
-                                .textFieldStyle(.roundedBorder)
-                                .font(.system(size: 11, design: .monospaced))
-
-                                TextField("Value", text: Binding(
-                                    get: { headers[idx].value },
-                                    set: { headers[idx].value = $0 }
-                                ))
-                                .textFieldStyle(.roundedBorder)
-                                .font(.system(size: 11, design: .monospaced))
-
-                                Button {
-                                    headers.remove(at: idx)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
                     }
-
-                    Divider()
-
-                    // Response Body
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("RESPONSE BODY")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Format JSON") { formatJSON() }
-                                .font(.system(size: 10))
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.blue)
-                        }
-                        TextEditor(text: $responseBody)
-                            .font(.system(size: 11, design: .monospaced))
-                            .frame(minHeight: 200)
-                            .padding(6)
-                            .background(Color(nsColor: .controlBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-                            )
+                    Button {
+                        headers.append((key: "", value: "", id: UUID()))
+                    } label: {
+                        Label("Add Header", systemImage: "plus.circle.fill")
+                            .font(.system(size: 11))
                     }
                 }
+
+                Section {
+                    HStack {
+                        Text("Response Body")
+                        Spacer()
+                        Button("Format JSON") { formatJSON() }
+                            .font(.system(size: 10))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.blue)
+                    }
+                    TextEditor(text: $responseBody)
+                        .font(.system(size: 11, design: .monospaced))
+                        .frame(minHeight: 200)
+                }
             }
+            .formStyle(.grouped)
         }
         .padding(20)
-        .frame(width: 600, height: 560)
+        .frame(width: 600, height: 580)
         .onAppear { populateFromEndpoint() }
     }
 

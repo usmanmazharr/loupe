@@ -13,6 +13,10 @@ struct LoupeMacApp: App {
                 .environmentObject(appState.client)
                 .environmentObject(mockServerStore)
                 .frame(minWidth: 900, minHeight: 600)
+                .onAppear {
+                    NSApplication.shared.setActivationPolicy(.regular)
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
