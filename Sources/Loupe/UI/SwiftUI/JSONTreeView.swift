@@ -126,8 +126,11 @@ struct JSONTreeView: View {
                 result = result + Text(before).foregroundColor(baseColor)
             }
             let match = String(source[range])
-            result = result + Text(match).foregroundColor(.black).bold()
-                .background(RoundedRectangle(cornerRadius: 2).fill(Color.yellow.opacity(0.7)))
+            var matchAttr = AttributedString(match)
+            matchAttr.foregroundColor = .black
+            matchAttr.backgroundColor = Color.yellow.opacity(0.7)
+            matchAttr.font = .system(size: 12, design: .monospaced).bold()
+            result = result + Text(matchAttr)
             searchStart = range.upperBound
         }
         let remaining = String(source[searchStart...])
