@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Detail panel: Overview / Request / Response / cURL tabs for a selected entry.
 struct MacRequestDetailView: View {
 
     let entry: MacNetworkEntry
     @EnvironmentObject private var appState: AppState
     @State private var tab: Tab = .overview
     @State private var bodySearch: String = ""
+    @State private var expandedSections: Set<String> = ["url", "method", "headers", "query", "body", "status"]
 
     enum Tab: String, CaseIterable {
         case overview = "Overview"
@@ -42,25 +42,8 @@ struct MacRequestDetailView: View {
 
             Divider()
 
-            // Body search bar — only on Request / Response tabs.
             if tab == .request || tab == .response {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("Search in \(tab == .request ? "request" : "response")…", text: $bodySearch)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                    if !bodySearch.isEmpty {
-                        Button {
-                            bodySearch = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.bar)
+                searchBar
                 Divider()
             }
 
@@ -68,8 +51,8 @@ struct MacRequestDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     switch tab {
                     case .overview:  overviewTab
-                    case .request:   requestTab
-                    case .response:  responseTab
+                    case .request:   requestTreeTab
+                    case .response:  responseTreeTab
                     case .curl:      curlTab
                     }
                 }
@@ -79,6 +62,82 @@ struct MacRequestDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Search Bar
+
+    private var totalMatchCount: Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        return tab == .request ? requestMatchCount : responseMatchCount
+    }
+
+    private var requestMatchCount: Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        let term = bodySearch.lowercased()
+        var count = 0
+        if entry.url.absoluteString.lowercased().contains(term) { count += 1 }
+        if entry.method.lowercased().contains(term) { count += 1 }
+        for (k, v) in entry.requestHeaders {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        for (k, v) in entry.queryParameters {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        if let data = entry.requestBody, let tree = MacJSONNode.parse(data) {
+            count += MacJSONTreeView.countMatches(in: tree, term: bodySearch)
+        } else if let data = entry.requestBody, let str = String(data: data, encoding: .utf8) {
+            count += str.lowercased().macCountOccurrences(of: term)
+        }
+        return count
+    }
+
+    private var responseMatchCount: Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        let term = bodySearch.lowercased()
+        var count = 0
+        if entry.url.absoluteString.lowercased().contains(term) { count += 1 }
+        if let code = entry.statusCode, String(code).contains(term) { count += 1 }
+        for (k, v) in entry.responseHeaders {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        if let data = entry.responseBody, let tree = MacJSONNode.parse(data) {
+            count += MacJSONTreeView.countMatches(in: tree, term: bodySearch)
+        } else if let data = entry.responseBody, let str = String(data: data, encoding: .utf8) {
+            count += str.lowercased().macCountOccurrences(of: term)
+        }
+        return count
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search in \(tab == .request ? "request" : "response")…", text: $bodySearch)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+            if !bodySearch.isEmpty {
+                Text("\(totalMatchCount) match\(totalMatchCount == 1 ? "" : "es")")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(totalMatchCount > 0 ? Color.orange : Color.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        (totalMatchCount > 0 ? Color.orange : Color.secondary).opacity(0.12),
+                        in: Capsule()
+                    )
+                Button {
+                    bodySearch = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     // MARK: - Header
@@ -105,7 +164,7 @@ struct MacRequestDetailView: View {
                 .textSelection(.enabled)
                 .lineLimit(3)
             HStack(spacing: 16) {
-                chip(icon: "clock",     text: entry.timing.formattedDuration)
+                chip(icon: "clock",      text: entry.timing.formattedDuration)
                 chip(icon: "arrow.down", text: entry.responseSize > 0 ? entry.responseSize.macFormattedSize : "—")
                 if entry.retryCount > 0 { chip(icon: "arrow.clockwise", text: "\(entry.retryCount) retries") }
             }
@@ -145,7 +204,293 @@ struct MacRequestDetailView: View {
             .foregroundStyle(.secondary)
     }
 
-    // MARK: - Tabs
+    // MARK: - Request Tree Tab
+
+    private var requestTreeTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            treeSection(id: "url", title: "URL", icon: "link") {
+                highlightedMono(entry.url.absoluteString)
+                    .textSelection(.enabled)
+            }
+
+            treeSection(id: "method", title: "Method", icon: "arrow.up.right") {
+                highlightedMono(entry.method)
+            }
+
+            treeSection(id: "headers", title: "Headers (\(entry.requestHeaders.count))", icon: "list.bullet.rectangle") {
+                keyValueTree(entry.requestHeaders)
+            }
+
+            if !entry.queryParameters.isEmpty {
+                treeSection(id: "query", title: "Query Parameters (\(entry.queryParameters.count))", icon: "questionmark.circle") {
+                    keyValueTree(entry.queryParameters)
+                }
+            }
+
+            bodyTreeSection(data: entry.requestBody, label: "Body")
+        }
+    }
+
+    // MARK: - Response Tree Tab
+
+    private var responseTreeTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            treeSection(id: "url", title: "URL", icon: "link") {
+                highlightedMono(entry.url.absoluteString)
+                    .textSelection(.enabled)
+            }
+
+            if let code = entry.statusCode {
+                treeSection(id: "status", title: "Status", icon: "number") {
+                    HStack(spacing: 8) {
+                        statusBadge(code)
+                        highlightedMono("\(code) \(HTTPURLResponse.localizedString(forStatusCode: code))")
+                    }
+                }
+            }
+
+            treeSection(id: "headers", title: "Headers (\(entry.responseHeaders.count))", icon: "list.bullet.rectangle") {
+                keyValueTree(entry.responseHeaders)
+            }
+
+            if entry.responseBody != nil || entry.status.isTerminal {
+                bodyTreeSection(data: entry.responseBody, label: "Body")
+            } else {
+                treeSection(id: "body", title: "Body", icon: "doc.text") {
+                    HStack(spacing: 8) {
+                        ProgressView().scaleEffect(0.8)
+                        Text("Waiting for response…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Tree Section
+
+    private func treeSection<Content: View>(
+        id: String,
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let isExpanded = expandedSections.contains(id)
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded { expandedSections.remove(id) }
+                    else { expandedSections.insert(id) }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.blue)
+
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    if !bodySearch.isEmpty {
+                        let matches = sectionMatchCount(id: id)
+                        if matches > 0 {
+                            Text("\(matches)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.orange, in: Capsule())
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    content()
+                }
+                .padding(.leading, 32)
+                .padding(.trailing, 12)
+                .padding(.bottom, 8)
+            }
+        }
+        .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func sectionMatchCount(id: String) -> Int {
+        guard !bodySearch.isEmpty else { return 0 }
+        let term = bodySearch.lowercased()
+
+        if tab == .request {
+            switch id {
+            case "url": return entry.url.absoluteString.lowercased().macCountOccurrences(of: term)
+            case "method": return entry.method.lowercased().contains(term) ? 1 : 0
+            case "headers": return countKVMatches(entry.requestHeaders, term: term)
+            case "query": return countKVMatches(entry.queryParameters, term: term)
+            case "body": return bodyMatchCount(data: entry.requestBody, term: term)
+            default: return 0
+            }
+        } else {
+            switch id {
+            case "url": return entry.url.absoluteString.lowercased().macCountOccurrences(of: term)
+            case "status":
+                if let code = entry.statusCode { return String(code).contains(term) ? 1 : 0 }
+                return 0
+            case "headers": return countKVMatches(entry.responseHeaders, term: term)
+            case "body": return bodyMatchCount(data: entry.responseBody, term: term)
+            default: return 0
+            }
+        }
+    }
+
+    private func countKVMatches(_ dict: [String: String], term: String) -> Int {
+        var count = 0
+        for (k, v) in dict {
+            if k.lowercased().contains(term) { count += 1 }
+            if v.lowercased().contains(term) { count += 1 }
+        }
+        return count
+    }
+
+    private func bodyMatchCount(data: Data?, term: String) -> Int {
+        guard let data else { return 0 }
+        if let tree = MacJSONNode.parse(data) {
+            return MacJSONTreeView.countMatches(in: tree, term: bodySearch)
+        }
+        if let str = String(data: data, encoding: .utf8) {
+            return str.lowercased().macCountOccurrences(of: term)
+        }
+        return 0
+    }
+
+    // MARK: - Key-Value Tree
+
+    private func keyValueTree(_ dict: [String: String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(dict.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                HStack(alignment: .top, spacing: 4) {
+                    highlightedText(key + ":", baseColor: .blue)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    highlightedText(value, baseColor: .secondary)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(3)
+                    Spacer()
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(value, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 3)
+                if key != dict.sorted(by: { $0.key < $1.key }).last?.key {
+                    Divider()
+                }
+            }
+        }
+    }
+
+    // MARK: - Body Tree Section
+
+    @ViewBuilder
+    private func bodyTreeSection(data: Data?, label: String) -> some View {
+        if let data, !data.isEmpty {
+            if let tree = MacJSONNode.parse(data) {
+                treeSection(id: "body", title: label, icon: "curlybraces") {
+                    MacJSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
+                    copyBodyButton(data)
+                }
+            } else if let str = String(data: data, encoding: .utf8) {
+                treeSection(id: "body", title: label, icon: "doc.text") {
+                    highlightedMono(str)
+                        .textSelection(.enabled)
+                    copyBodyButton(data)
+                }
+            } else {
+                treeSection(id: "body", title: label, icon: "doc") {
+                    Text("<binary \(data.count) bytes>")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            treeSection(id: "body", title: label, icon: "doc") {
+                Text("(empty)")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func copyBodyButton(_ data: Data) -> some View {
+        HStack {
+            Spacer()
+            Button {
+                let text: String
+                if let obj = try? JSONSerialization.jsonObject(with: data),
+                   let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
+                   let str = String(data: pretty, encoding: .utf8) {
+                    text = str
+                } else {
+                    text = String(data: data, encoding: .utf8) ?? ""
+                }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+                    .font(.caption.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+
+    // MARK: - Highlighted Text
+
+    private func highlightedMono(_ source: String) -> Text {
+        if bodySearch.isEmpty {
+            return Text(source)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.primary)
+        }
+        return highlightedText(source, baseColor: .primary)
+            .font(.system(size: 12, design: .monospaced))
+    }
+
+    private func highlightedText(_ source: String, baseColor: Color) -> Text {
+        guard !bodySearch.isEmpty else { return Text(source).foregroundColor(baseColor) }
+        var attributed = AttributedString(source)
+        let lowerSource = source.lowercased()
+        let lowerTerm   = bodySearch.lowercased()
+        var searchStart = lowerSource.startIndex
+        while let range = lowerSource.range(of: lowerTerm, range: searchStart..<lowerSource.endIndex) {
+            if let attrRange = Range(range, in: attributed) {
+                attributed[attrRange].backgroundColor = .yellow.opacity(0.6)
+                attributed[attrRange].foregroundColor = .black
+            }
+            searchStart = range.upperBound
+        }
+        return Text(attributed).foregroundColor(baseColor)
+    }
+
+    // MARK: - Overview Tab
 
     private var overviewTab: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -175,88 +520,32 @@ struct MacRequestDetailView: View {
         }
     }
 
-    private var requestTab: some View {
-        let formatted = entry.formattedRequest
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Request").font(.headline)
-                Spacer()
-                copyButton(text: formatted)
-            }
-            blockView(text: formatted, highlight: bodySearch)
-        }
-    }
-
-    private var responseTab: some View {
-        let formatted = entry.formattedResponse
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Response").font(.headline)
-                if entry.responseSize > 0 {
-                    Text("· \(entry.responseSize.macFormattedSize)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                copyButton(text: formatted)
-            }
-            blockView(text: formatted, highlight: bodySearch)
-        }
-    }
-
     private var curlTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("cURL Command").font(.headline)
                 Spacer()
-                copyButton(text: entry.curlCommand)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(entry.curlCommand, forType: .string)
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc").font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            blockView(text: entry.curlCommand, highlight: "")
-        }
-    }
-
-    // MARK: - Reusable pieces
-
-    private func copyButton(text: String) -> some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        } label: {
-            Label("Copy", systemImage: "doc.on.doc")
-                .font(.caption)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-    }
-
-    @ViewBuilder
-    private func blockView(text: String, highlight: String) -> some View {
-        let display = highlight.isEmpty ? AttributedString(text) : highlighted(text, term: highlight)
-        ScrollView(.horizontal, showsIndicators: false) {
-            Text(display)
-                .font(.system(size: 12, design: .monospaced))
-                .textSelection(.enabled)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func highlighted(_ source: String, term: String) -> AttributedString {
-        var attributed = AttributedString(source)
-        guard !term.isEmpty else { return attributed }
-        let lowerSource = source.lowercased()
-        let lowerTerm   = term.lowercased()
-        var searchStart = lowerSource.startIndex
-        while let range = lowerSource.range(of: lowerTerm, range: searchStart ..< lowerSource.endIndex) {
-            if let attrRange = Range(range, in: attributed) {
-                attributed[attrRange].backgroundColor = .yellow.opacity(0.5)
-                attributed[attrRange].foregroundColor = .black
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(entry.curlCommand)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            searchStart = range.upperBound
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
         }
-        return attributed
     }
+
+    // MARK: - Reusable
 
     private func infoSection<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -295,18 +584,32 @@ struct MacRequestDetailView: View {
 
     private func statusColor(_ code: Int) -> Color {
         switch code {
-        case 200 ..< 300: return .green
-        case 300 ..< 400: return .blue
-        case 400 ..< 500: return .orange
-        default:          return .red
+        case 200..<300: return .green
+        case 300..<400: return .blue
+        case 400..<500: return .orange
+        default:        return .red
         }
+    }
+}
+
+// MARK: - String helpers
+
+extension String {
+    fileprivate func macCountOccurrences(of term: String) -> Int {
+        guard !term.isEmpty else { return 0 }
+        var count = 0
+        var searchStart = startIndex
+        while let range = range(of: term, range: searchStart..<endIndex) {
+            count += 1
+            searchStart = range.upperBound
+        }
+        return count
     }
 }
 
 // MARK: - Formatting helpers
 
 extension MacNetworkEntry {
-    /// Pretty-prints a JSON body, or returns the raw UTF-8 string, or a placeholder.
     fileprivate func bodyString(_ data: Data?) -> String {
         guard let data, !data.isEmpty else { return "" }
         if let obj = try? JSONSerialization.jsonObject(with: data),
@@ -318,7 +621,6 @@ extension MacNetworkEntry {
         return "<binary \(data.count) bytes>"
     }
 
-    /// Renders the dictionary in Swift-literal form: ["key": "value", ...]
     fileprivate func headerLiteral(_ headers: [String: String]) -> String {
         if headers.isEmpty { return "[:]" }
         let pairs = headers.map { #""\#($0.key)": "\#($0.value)""# }.joined(separator: ", ")
@@ -330,18 +632,14 @@ extension MacNetworkEntry {
         out += "METHOD: \n\(method)\n\n"
         out += "HEADERS: \n\(headerLiteral(requestHeaders))"
         let body = bodyString(requestBody)
-        if !body.isEmpty {
-            out += "\n\nBODY: \n\(body)"
-        }
+        if !body.isEmpty { out += "\n\nBODY: \n\(body)" }
         return out
     }
 
     var formattedResponse: String {
         var out = "URL: \n\(url.absoluteString)\n\n"
         out += "HEADERS: \n\(headerLiteral(responseHeaders))\n\n"
-        if let code = statusCode {
-            out += "STATUS: \n\(code)\n\n"
-        }
+        if let code = statusCode { out += "STATUS: \n\(code)\n\n" }
         let body = bodyString(responseBody)
         out += "RESPONSE: \n\(body.isEmpty ? "<no body>" : body)"
         return out
