@@ -2,12 +2,12 @@ import Foundation
 
 /// Parses JSON data into a tree of `JSONNode` values for syntax-highlighted rendering.
 public indirect enum JSONNode: Identifiable {
-    case object(id: UUID = UUID(), key: String?, children: [JSONNode])
-    case array(id: UUID = UUID(), key: String?, children: [JSONNode])
-    case string(id: UUID = UUID(), key: String?, value: String)
-    case number(id: UUID = UUID(), key: String?, value: Double)
-    case bool(id: UUID = UUID(), key: String?, value: Bool)
-    case null(id: UUID = UUID(), key: String?)
+    case object(id: UUID, key: String?, children: [JSONNode])
+    case array(id: UUID, key: String?, children: [JSONNode])
+    case string(id: UUID, key: String?, value: String)
+    case number(id: UUID, key: String?, value: Double)
+    case bool(id: UUID, key: String?, value: Bool)
+    case null(id: UUID, key: String?)
 
     public var id: UUID {
         switch self {
@@ -61,7 +61,7 @@ public enum JSONFormatter {
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
             return nil
         }
-        return node(from: obj, key: nil)
+        return node(from: obj, key: nil, path: "root")
     }
 
     /// Parses a JSON string into a `JSONNode` tree.
@@ -72,29 +72,38 @@ public enum JSONFormatter {
 
     // MARK: Private
 
-    private static func node(from value: Any, key: String?) -> JSONNode {
+    private static func deterministicUUID(from path: String) -> UUID {
+        let hash = path.utf8.reduce(into: [UInt8](repeating: 0, count: 16)) { result, byte in
+            for i in 0..<16 {
+                result[i] = result[i] &+ byte &* UInt8(truncatingIfNeeded: i &+ 1)
+            }
+        }
+        return UUID(uuid: (hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7],
+                           hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]))
+    }
+
+    private static func node(from value: Any, key: String?, path: String) -> JSONNode {
+        let id = deterministicUUID(from: path)
         switch value {
         case let dict as [String: Any]:
-            let children = dict.sorted(by: { $0.key < $1.key }).map { node(from: $0.value, key: $0.key) }
-            return .object(key: key, children: children)
+            let children = dict.map { node(from: $0.value, key: $0.key, path: "\(path).\($0.key)") }
+            return .object(id: id, key: key, children: children)
 
         case let array as [Any]:
-            let children = array.enumerated().map { node(from: $0.element, key: "[\($0.offset)]") }
-            return .array(key: key, children: children)
+            let children = array.enumerated().map { node(from: $0.element, key: "[\($0.offset)]", path: "\(path)[\($0.offset)]") }
+            return .array(id: id, key: key, children: children)
 
         case let str as String:
-            return .string(key: key, value: str)
+            return .string(id: id, key: key, value: str)
 
         case let num as NSNumber:
-            // Distinguish bool from numeric – NSNumber booleans have ObjC type 'B'
             if String(cString: num.objCType) == "c" {
-                return .bool(key: key, value: num.boolValue)
+                return .bool(id: id, key: key, value: num.boolValue)
             }
-            return .number(key: key, value: num.doubleValue)
+            return .number(id: id, key: key, value: num.doubleValue)
 
         default:
-            // NSNull or unrecognised
-            return .null(key: key)
+            return .null(id: id, key: key)
         }
     }
 }

@@ -15,6 +15,7 @@ struct RequestDetailView: View {
         "res-status", "res-headers", "res-body"
     ]
 
+
     enum Tab: String, CaseIterable, Identifiable {
         case overview        = "Overview"
         case requestResponse = "Request & Response"
@@ -130,11 +131,7 @@ struct RequestDetailView: View {
         currentMatchIndex = (currentMatchIndex + delta + anchors.count) % anchors.count
         let target = anchors[currentMatchIndex]
 
-        // Expand parent section if collapsed
-        for section in expandedSections.union(["req-url", "req-method", "req-headers", "req-query", "req-body", "res-status", "res-headers", "res-body"]) {
-            // Already expanded
-        }
-        // Ensure all sections are expanded when navigating
+        // Ensure parent section is expanded when navigating
         if target.hasPrefix("kv-req-headers") { expandedSections.insert("req-headers") }
         else if target.hasPrefix("kv-req-query") { expandedSections.insert("req-query") }
         else if target.hasPrefix("kv-res-headers") { expandedSections.insert("res-headers") }

@@ -651,7 +651,7 @@ function treeSection(id, icon, title, count, matchCount, bodyHTML) {
 
 function kvTreeHTML(obj) {
   if (!obj || Object.keys(obj).length === 0) return '<span style="color:var(--mist);font-size:11px">(empty)</span>';
-  return Object.entries(obj).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v]) =>
+  return Object.entries(obj).map(([k,v]) =>
     '<div class="tree-kv"><span class="tree-kv-key">' + highlightText(k) + ':</span><span class="tree-kv-val">' + highlightText(v) + '</span></div>'
   ).join('');
 }
@@ -692,7 +692,7 @@ function jsonNodeHTML(val, key, expanded) {
     const shouldExpand = expanded || (detailSearch && mc > 0);
     let html = '<div class="json-node">' + '<span class="json-toggle" data-tree="' + id + '">' + (shouldExpand?'&#9660;':'&#9654;') + '</span>' + keyStr + '<span class="json-bracket">{</span> <span style="color:var(--fog);font-size:10px">' + keys.length + ' fields</span>' + badge;
     html += '<div id="' + id + '" style="padding-left:16px;' + (shouldExpand?'':'display:none') + '">';
-    keys.sort().forEach(k => { html += jsonNodeHTML(val[k], k, false); });
+    keys.forEach(k => { html += jsonNodeHTML(val[k], k, false); });
     html += '</div><span class="json-bracket">}</span></div>';
     return html;
   }
