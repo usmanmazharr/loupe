@@ -75,6 +75,7 @@ struct JSONTreeView: View {
                 withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
             }
         }
+        .id(node.id.uuidString)
     }
 
     // MARK: - Children
@@ -165,6 +166,32 @@ struct JSONTreeView: View {
 
     static func nodeContainsMatch(_ node: JSONNode, term: String) -> Bool {
         countMatches(in: node, term: term) > 0
+    }
+
+    static func matchingNodeIDs(in node: JSONNode, term: String) -> [String] {
+        guard !term.isEmpty else { return [] }
+        var ids: [String] = []
+        collectMatchIDs(node, lowerTerm: term.lowercased(), ids: &ids)
+        return ids
+    }
+
+    private static func collectMatchIDs(_ node: JSONNode, lowerTerm: String, ids: inout [String]) {
+        let nodeMatches: Bool
+        switch node {
+        case .string(_, let k, let v):
+            nodeMatches = (k?.lowercased().contains(lowerTerm) ?? false) || v.lowercased().contains(lowerTerm)
+        case .number(_, let k, let v):
+            nodeMatches = (k?.lowercased().contains(lowerTerm) ?? false) || String(v).lowercased().contains(lowerTerm)
+        case .bool(_, let k, let v):
+            nodeMatches = (k?.lowercased().contains(lowerTerm) ?? false) || String(v).lowercased().contains(lowerTerm)
+        case .null(_, let k):
+            nodeMatches = (k?.lowercased().contains(lowerTerm) ?? false) || "null".contains(lowerTerm)
+        case .object(_, let k, let kids), .array(_, let k, let kids):
+            if k?.lowercased().contains(lowerTerm) ?? false { ids.append(node.id.uuidString) }
+            for child in kids { collectMatchIDs(child, lowerTerm: lowerTerm, ids: &ids) }
+            return
+        }
+        if nodeMatches { ids.append(node.id.uuidString) }
     }
 
     // MARK: - Helpers

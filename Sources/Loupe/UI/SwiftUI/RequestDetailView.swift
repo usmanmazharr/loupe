@@ -10,24 +10,24 @@ struct RequestDetailView: View {
     @State private var copied: Bool = false
     @State private var currentMatchIndex: Int = 0
 
-    // Collapsible section state
-    @State private var expandedSections: Set<String> = ["url", "headers", "query", "body", "status"]
+    @State private var expandedSections: Set<String> = [
+        "req-url", "req-method", "req-headers", "req-query", "req-body",
+        "res-status", "res-headers", "res-body"
+    ]
 
     enum Tab: String, CaseIterable, Identifiable {
-        case overview = "Overview"
-        case request  = "Request"
-        case response = "Response"
-        case timeline = "Timeline"
-        case curl     = "cURL"
+        case overview        = "Overview"
+        case requestResponse = "Request & Response"
+        case timeline        = "Timeline"
+        case curl            = "cURL"
 
         var id: String { rawValue }
         var systemImage: String {
             switch self {
-            case .overview: return "doc.text"
-            case .request:  return "arrow.up.circle"
-            case .response: return "arrow.down.circle"
-            case .timeline: return "timeline.selection"
-            case .curl:     return "terminal"
+            case .overview:        return "doc.text"
+            case .requestResponse: return "arrow.up.arrow.down"
+            case .timeline:        return "timeline.selection"
+            case .curl:            return "terminal"
             }
         }
     }
@@ -53,20 +53,19 @@ struct RequestDetailView: View {
 
             Divider()
 
-            if selectedTab == .request || selectedTab == .response {
-                searchBarWithCount
-                Divider()
-            }
-
             ScrollViewReader { proxy in
+                if selectedTab == .requestResponse {
+                    searchBarWithCount(proxy: proxy)
+                    Divider()
+                }
+
                 ScrollView {
                     Group {
                         switch selectedTab {
-                        case .overview:  overviewTab
-                        case .request:   requestTreeTab
-                        case .response:  responseTreeTab
-                        case .timeline:  RequestTimelineView(entry: entry)
-                        case .curl:      curlTab
+                        case .overview:        overviewTab
+                        case .requestResponse: requestResponseTab
+                        case .timeline:        RequestTimelineView(entry: entry)
+                        case .curl:            curlTab
                         }
                     }
                     .id(selectedTab)
@@ -74,9 +73,6 @@ struct RequestDetailView: View {
                     .padding(.vertical, 16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 40)
-                }
-                .onChange(of: currentMatchIndex) { _ in
-                    scrollToCurrentMatch(proxy: proxy)
                 }
             }
         }
@@ -87,124 +83,98 @@ struct RequestDetailView: View {
         .tfNavigationBar()
     }
 
-    // MARK: - Search bar with match count
+    // MARK: - Individual match navigation
 
-    private var totalMatchCount: Int {
-        guard !bodySearch.isEmpty else { return 0 }
-        if selectedTab == .request {
-            return requestMatchCount
-        } else {
-            return responseMatchCount
-        }
-    }
-
-    private var requestMatchCount: Int {
-        guard !bodySearch.isEmpty else { return 0 }
-        let term = bodySearch.lowercased()
-        var count = 0
-        // URL
-        if entry.url.absoluteString.lowercased().contains(term) { count += 1 }
-        // Method
-        if entry.method.lowercased().contains(term) { count += 1 }
-        // Headers
-        for (k, v) in entry.requestHeaders {
-            if k.lowercased().contains(term) { count += 1 }
-            if v.lowercased().contains(term) { count += 1 }
-        }
-        // Query params
-        for (k, v) in entry.queryParameters {
-            if k.lowercased().contains(term) { count += 1 }
-            if v.lowercased().contains(term) { count += 1 }
-        }
-        // Body
-        if let data = entry.requestBody, let tree = JSONFormatter.parse(data) {
-            count += JSONTreeView.countMatches(in: tree, term: bodySearch)
-        } else if let data = entry.requestBody, let str = String(data: data, encoding: .utf8) {
-            count += str.lowercased().countOccurrences(of: term)
-        }
-        return count
-    }
-
-    private var responseMatchCount: Int {
-        guard !bodySearch.isEmpty else { return 0 }
-        let term = bodySearch.lowercased()
-        var count = 0
-        // URL
-        if entry.url.absoluteString.lowercased().contains(term) { count += 1 }
-        // Status
-        if let code = entry.statusCode, String(code).contains(term) { count += 1 }
-        // Headers
-        for (k, v) in entry.responseHeaders {
-            if k.lowercased().contains(term) { count += 1 }
-            if v.lowercased().contains(term) { count += 1 }
-        }
-        // Body
-        if let data = entry.responseBody, let tree = JSONFormatter.parse(data) {
-            count += JSONTreeView.countMatches(in: tree, term: bodySearch)
-        } else if let data = entry.responseBody, let str = String(data: data, encoding: .utf8) {
-            count += str.lowercased().countOccurrences(of: term)
-        }
-        return count
-    }
-
-    private var matchingSectionIDs: [String] {
+    private var allMatchAnchors: [String] {
         guard !bodySearch.isEmpty else { return [] }
-        let allIDs: [String]
-        if selectedTab == .request {
-            allIDs = ["url", "method", "headers", "query", "body"]
-        } else {
-            allIDs = ["url", "status", "headers", "body"]
+        let term = bodySearch.lowercased()
+        var anchors: [String] = []
+
+        if entry.url.absoluteString.lowercased().contains(term) { anchors.append("req-url") }
+        if entry.method.lowercased().contains(term) { anchors.append("req-method") }
+        for (k, v) in entry.requestHeaders.sorted(by: { $0.key < $1.key }) {
+            if k.lowercased().contains(term) || v.lowercased().contains(term) {
+                anchors.append("kv-req-headers-\(k)")
+            }
         }
-        return allIDs.filter { sectionMatchCount(id: $0) > 0 }
+        for (k, v) in entry.queryParameters.sorted(by: { $0.key < $1.key }) {
+            if k.lowercased().contains(term) || v.lowercased().contains(term) {
+                anchors.append("kv-req-query-\(k)")
+            }
+        }
+        if let data = entry.requestBody, let tree = JSONFormatter.parse(data) {
+            anchors.append(contentsOf: JSONTreeView.matchingNodeIDs(in: tree, term: bodySearch))
+        } else if let data = entry.requestBody, let str = String(data: data, encoding: .utf8), str.lowercased().contains(term) {
+            anchors.append("req-body")
+        }
+
+        if let code = entry.statusCode, String(code).contains(term) { anchors.append("res-status") }
+        for (k, v) in entry.responseHeaders.sorted(by: { $0.key < $1.key }) {
+            if k.lowercased().contains(term) || v.lowercased().contains(term) {
+                anchors.append("kv-res-headers-\(k)")
+            }
+        }
+        if let data = entry.responseBody, let tree = JSONFormatter.parse(data) {
+            anchors.append(contentsOf: JSONTreeView.matchingNodeIDs(in: tree, term: bodySearch))
+        } else if let data = entry.responseBody, let str = String(data: data, encoding: .utf8), str.lowercased().contains(term) {
+            anchors.append("res-body")
+        }
+
+        return anchors
     }
 
-    private func scrollToCurrentMatch(proxy: ScrollViewProxy) {
-        let sections = matchingSectionIDs
-        guard !sections.isEmpty else { return }
-        let idx = currentMatchIndex % sections.count
-        let target = sections[idx]
-        if !expandedSections.contains(target) {
-            expandedSections.insert(target)
+    private var totalMatchCount: Int { allMatchAnchors.count }
+
+    private func navigateMatch(delta: Int, proxy: ScrollViewProxy) {
+        let anchors = allMatchAnchors
+        guard !anchors.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex + delta + anchors.count) % anchors.count
+        let target = anchors[currentMatchIndex]
+
+        // Expand parent section if collapsed
+        for section in expandedSections.union(["req-url", "req-method", "req-headers", "req-query", "req-body", "res-status", "res-headers", "res-body"]) {
+            // Already expanded
         }
-        withAnimation(.easeInOut(duration: 0.3)) {
-            proxy.scrollTo("section-\(target)", anchor: .top)
+        // Ensure all sections are expanded when navigating
+        if target.hasPrefix("kv-req-headers") { expandedSections.insert("req-headers") }
+        else if target.hasPrefix("kv-req-query") { expandedSections.insert("req-query") }
+        else if target.hasPrefix("kv-res-headers") { expandedSections.insert("res-headers") }
+        else if target.hasPrefix("req-") { expandedSections.insert(target) }
+        else if target.hasPrefix("res-") { expandedSections.insert(target) }
+        else { expandedSections.insert("req-body"); expandedSections.insert("res-body") }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
         }
     }
 
-    private var searchBarWithCount: some View {
+    private func searchBarWithCount(proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search keys, values…", text: $bodySearch)
+            TextField("Search request & response…", text: $bodySearch)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(size: 14, design: .monospaced))
                 .onChange(of: bodySearch) { _ in currentMatchIndex = 0 }
             if !bodySearch.isEmpty {
                 let count = totalMatchCount
-                let sections = matchingSectionIDs
                 if count > 0 {
-                    Text("\(sections.isEmpty ? 0 : (currentMatchIndex % sections.count) + 1) of \(count)")
+                    Text("\(min(currentMatchIndex + 1, count)) of \(count)")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.orange)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.orange.opacity(0.12), in: Capsule())
 
-                    Button {
-                        if !sections.isEmpty {
-                            currentMatchIndex = (currentMatchIndex - 1 + sections.count) % sections.count
-                        }
-                    } label: {
+                    Button { navigateMatch(delta: -1, proxy: proxy) } label: {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color.orange)
                     }
 
-                    Button {
-                        if !sections.isEmpty {
-                            currentMatchIndex = (currentMatchIndex + 1) % sections.count
-                        }
-                    } label: {
+                    Button { navigateMatch(delta: 1, proxy: proxy) } label: {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color.orange)
@@ -217,9 +187,7 @@ struct RequestDetailView: View {
                         .padding(.vertical, 3)
                         .background(Color.secondary.opacity(0.12), in: Capsule())
                 }
-                Button {
-                    bodySearch = ""
-                } label: {
+                Button { bodySearch = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
             }
@@ -298,61 +266,45 @@ struct RequestDetailView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Request Tree Tab (Postman-style)
+    // MARK: - Merged Request & Response Tab
 
-    private var requestTreeTab: some View {
+    private var requestResponseTab: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // URL section
-            treeSection(id: "url", title: "URL", icon: "link", count: nil) {
+            Text("REQUEST")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
+
+            treeSection(id: "req-url", title: "URL", icon: "link", count: nil) {
                 highlightedMonoText(entry.url.absoluteString)
                     .textSelection(.enabled)
             }
 
-            // Method
-            treeSection(id: "method", title: "Method", icon: "arrow.up.right", count: nil) {
+            treeSection(id: "req-method", title: "Method", icon: "arrow.up.right", count: nil) {
                 highlightedMonoText(entry.method)
             }
 
-            // Headers section
-            treeSection(
-                id: "headers",
-                title: "Headers",
-                icon: "list.bullet.rectangle",
-                count: entry.requestHeaders.count
-            ) {
-                keyValueTree(entry.requestHeaders)
+            treeSection(id: "req-headers", title: "Headers", icon: "list.bullet.rectangle", count: entry.requestHeaders.count) {
+                keyValueTree(entry.requestHeaders, sectionId: "req-headers")
             }
 
-            // Query Parameters
             if !entry.queryParameters.isEmpty {
-                treeSection(
-                    id: "query",
-                    title: "Query Parameters",
-                    icon: "questionmark.circle",
-                    count: entry.queryParameters.count
-                ) {
-                    keyValueTree(entry.queryParameters)
+                treeSection(id: "req-query", title: "Query Parameters", icon: "questionmark.circle", count: entry.queryParameters.count) {
+                    keyValueTree(entry.queryParameters, sectionId: "req-query")
                 }
             }
 
-            // Body section
-            bodyTreeSection(data: entry.requestBody, contentType: entry.requestContentType, label: "Body")
-        }
-    }
+            bodyTreeSection(data: entry.requestBody, contentType: entry.requestContentType, id: "req-body", label: "Body")
 
-    // MARK: - Response Tree Tab (Postman-style)
+            Divider().padding(.vertical, 4)
 
-    private var responseTreeTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // URL
-            treeSection(id: "url", title: "URL", icon: "link", count: nil) {
-                highlightedMonoText(entry.url.absoluteString)
-                    .textSelection(.enabled)
-            }
+            Text("RESPONSE")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
 
-            // Status
             if let code = entry.statusCode {
-                treeSection(id: "status", title: "Status", icon: "number", count: nil) {
+                treeSection(id: "res-status", title: "Status", icon: "number", count: nil) {
                     HStack(spacing: 8) {
                         StatusBadge(code: code, status: entry.status)
                         highlightedMonoText("\(code) \(HTTPURLResponse.localizedString(forStatusCode: code))")
@@ -360,21 +312,14 @@ struct RequestDetailView: View {
                 }
             }
 
-            // Headers
-            treeSection(
-                id: "headers",
-                title: "Headers",
-                icon: "list.bullet.rectangle",
-                count: entry.responseHeaders.count
-            ) {
-                keyValueTree(entry.responseHeaders)
+            treeSection(id: "res-headers", title: "Headers", icon: "list.bullet.rectangle", count: entry.responseHeaders.count) {
+                keyValueTree(entry.responseHeaders, sectionId: "res-headers")
             }
 
-            // Body
             if entry.responseBody != nil || entry.status.isTerminal {
-                bodyTreeSection(data: entry.responseBody, contentType: entry.responseContentType, label: "Body")
+                bodyTreeSection(data: entry.responseBody, contentType: entry.responseContentType, id: "res-body", label: "Body")
             } else {
-                treeSection(id: "body", title: "Body", icon: "doc.text", count: nil) {
+                treeSection(id: "res-body", title: "Body", icon: "doc.text", count: nil) {
                     HStack(spacing: 8) {
                         ProgressView().scaleEffect(0.8)
                         Text("Waiting for response…")
@@ -453,40 +398,24 @@ struct RequestDetailView: View {
             }
         }
         .background(Color.tfCardBackground, in: RoundedRectangle(cornerRadius: 10))
-        .id("section-\(id)")
+        .id(id)
     }
 
     private func sectionMatchCount(id: String) -> Int {
         guard !bodySearch.isEmpty else { return 0 }
         let term = bodySearch.lowercased()
-
-        if selectedTab == .request {
-            switch id {
-            case "url":
-                return entry.url.absoluteString.lowercased().countOccurrences(of: term)
-            case "method":
-                return entry.method.lowercased().contains(term) ? 1 : 0
-            case "headers":
-                return countKVMatches(entry.requestHeaders, term: term)
-            case "query":
-                return countKVMatches(entry.queryParameters, term: term)
-            case "body":
-                return bodyMatchCount(data: entry.requestBody, term: term)
-            default: return 0
-            }
-        } else {
-            switch id {
-            case "url":
-                return entry.url.absoluteString.lowercased().countOccurrences(of: term)
-            case "status":
-                if let code = entry.statusCode { return String(code).contains(term) ? 1 : 0 }
-                return 0
-            case "headers":
-                return countKVMatches(entry.responseHeaders, term: term)
-            case "body":
-                return bodyMatchCount(data: entry.responseBody, term: term)
-            default: return 0
-            }
+        switch id {
+        case "req-url": return entry.url.absoluteString.lowercased().countOccurrences(of: term)
+        case "req-method": return entry.method.lowercased().contains(term) ? 1 : 0
+        case "req-headers": return countKVMatches(entry.requestHeaders, term: term)
+        case "req-query": return countKVMatches(entry.queryParameters, term: term)
+        case "req-body": return bodyMatchCount(data: entry.requestBody, term: term)
+        case "res-status":
+            if let code = entry.statusCode { return String(code).contains(term) ? 1 : 0 }
+            return 0
+        case "res-headers": return countKVMatches(entry.responseHeaders, term: term)
+        case "res-body": return bodyMatchCount(data: entry.responseBody, term: term)
+        default: return 0
         }
     }
 
@@ -512,7 +441,7 @@ struct RequestDetailView: View {
 
     // MARK: - Key-Value Tree
 
-    private func keyValueTree(_ dict: [String: String]) -> some View {
+    private func keyValueTree(_ dict: [String: String], sectionId: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(dict.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
                 HStack(alignment: .top, spacing: 4) {
@@ -532,6 +461,7 @@ struct RequestDetailView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.vertical, 3)
+                .id("kv-\(sectionId)-\(key)")
                 if key != dict.sorted(by: { $0.key < $1.key }).last?.key {
                     Divider()
                 }
@@ -542,11 +472,11 @@ struct RequestDetailView: View {
     // MARK: - Body Tree Section
 
     @ViewBuilder
-    private func bodyTreeSection(data: Data?, contentType: ContentType, label: String) -> some View {
+    private func bodyTreeSection(data: Data?, contentType: ContentType, id: String, label: String) -> some View {
         let formatted = BodyFormatter.format(data: data, contentType: contentType)
         switch formatted {
         case .json(let raw, let tree):
-            treeSection(id: "body", title: label, icon: "curlybraces", count: nil) {
+            treeSection(id: id, title: label, icon: "curlybraces", count: nil) {
                 if let tree {
                     JSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
                 } else {
@@ -575,37 +505,37 @@ struct RequestDetailView: View {
                 }
             }
         case .xml(let str):
-            treeSection(id: "body", title: label, icon: "chevron.left.forwardslash.chevron.right", count: nil) {
+            treeSection(id: id, title: label, icon: "chevron.left.forwardslash.chevron.right", count: nil) {
                 highlightedMonoText(str)
                     .textSelection(.enabled)
                 copyButton(str)
             }
         case .text(let str):
-            treeSection(id: "body", title: label, icon: "doc.text", count: nil) {
+            treeSection(id: id, title: label, icon: "doc.text", count: nil) {
                 highlightedMonoText(str)
                     .textSelection(.enabled)
                 copyButton(str)
             }
         case .image(_, let sub):
-            treeSection(id: "body", title: label, icon: "photo", count: nil) {
+            treeSection(id: id, title: label, icon: "photo", count: nil) {
                 Text("Image (\(sub))")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
         case .pdf:
-            treeSection(id: "body", title: label, icon: "doc.richtext", count: nil) {
+            treeSection(id: id, title: label, icon: "doc.richtext", count: nil) {
                 Text("PDF document")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
         case .binary(let desc):
-            treeSection(id: "body", title: label, icon: "doc", count: nil) {
+            treeSection(id: id, title: label, icon: "doc", count: nil) {
                 Text(desc)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
         case .empty:
-            treeSection(id: "body", title: label, icon: "doc", count: nil) {
+            treeSection(id: id, title: label, icon: "doc", count: nil) {
                 Text("(empty)")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.tertiary)

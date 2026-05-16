@@ -113,7 +113,8 @@ pre.body-block { background:var(--surface); border-radius:8px; padding:12px; fon
 .json-null { color:#546E7A; }
 .json-bracket { color:var(--fog); }
 .json-match-badge { font-size:9px; font-weight:700; color:#fff; background:var(--warning); padding:0 5px; border-radius:50px; margin-left:4px; }
-mark { background:#E0AC4A88; color:#fff; border-radius:2px; padding:0 1px; }
+mark { background:#E0AC4A55; color:#fff; border-radius:2px; padding:0 1px; transition:background 0.15s; }
+mark.active-match { background:#E0AC4A; outline:2px solid #E0AC4A; }
 
 /* Console */
 .log-row { display:flex; gap:8px; padding:6px 20px; border-bottom:1px solid var(--hairline); font-family:var(--mono); font-size:11px; align-items:flex-start; }
@@ -207,8 +208,7 @@ mark { background:#E0AC4A88; color:#fff; border-radius:2px; padding:0 1px; }
     </div>
     <div class="detail-tabs" id="detailTabs">
       <div class="detail-tab active" data-dtab="overview">Overview</div>
-      <div class="detail-tab" data-dtab="request">Request</div>
-      <div class="detail-tab" data-dtab="response">Response</div>
+      <div class="detail-tab" data-dtab="requestResponse">Request & Response</div>
     </div>
     <div class="detail-search" id="detailSearchBar" style="display:none">
       <span style="color:var(--fog);font-size:12px">&#128269;</span>
@@ -374,7 +374,7 @@ document.getElementById('detailTabs').addEventListener('click', (e) => {
   document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   const searchBar = document.getElementById('detailSearchBar');
-  searchBar.style.display = (activeDetailTab === 'request' || activeDetailTab === 'response') ? 'flex' : 'none';
+  searchBar.style.display = activeDetailTab === 'requestResponse' ? 'flex' : 'none';
   renderDetail();
 });
 
@@ -384,60 +384,67 @@ document.getElementById('detailSearchInput').addEventListener('input', (e) => {
   renderDetail();
 });
 document.getElementById('searchPrev').addEventListener('click', () => {
-  const sections = getMatchingSections();
-  if (!sections.length) return;
-  currentMatchSectionIdx = (currentMatchSectionIdx - 1 + sections.length) % sections.length;
+  const marks = document.querySelectorAll('#detailBody mark');
+  if (!marks.length) return;
+  currentMatchSectionIdx = (currentMatchSectionIdx - 1 + marks.length) % marks.length;
   updateMatchBadge();
-  scrollToMatchSection(sections[currentMatchSectionIdx]);
+  scrollToMark(marks[currentMatchSectionIdx]);
 });
 document.getElementById('searchNext').addEventListener('click', () => {
-  const sections = getMatchingSections();
-  if (!sections.length) return;
-  currentMatchSectionIdx = (currentMatchSectionIdx + 1) % sections.length;
+  const marks = document.querySelectorAll('#detailBody mark');
+  if (!marks.length) return;
+  currentMatchSectionIdx = (currentMatchSectionIdx + 1) % marks.length;
   updateMatchBadge();
-  scrollToMatchSection(sections[currentMatchSectionIdx]);
+  scrollToMark(marks[currentMatchSectionIdx]);
 });
 
 function getMatchingSections() {
   if (!selectedEntry || !detailSearch) return [];
   const e = selectedEntry;
-  const ids = activeDetailTab === 'request'
-    ? ['url','method','headers','query','body']
-    : ['url','status','headers','body'];
+  const ids = ['req-url','req-method','req-headers','req-query','req-body','res-status','res-headers','res-body'];
   return ids.filter(id => sectionMatchCount(id, e) > 0);
 }
 
 function sectionMatchCount(id, e) {
   if (!detailSearch) return 0;
-  if (activeDetailTab === 'request') {
-    switch(id) {
-      case 'url': return countStr(e.url, detailSearch);
-      case 'method': return countStr(e.method, detailSearch);
-      case 'headers': return countKV(e.requestHeaders, detailSearch);
-      case 'query': return countKV(e.queryParameters, detailSearch);
-      case 'body': return countBodyMatches(e.requestBody, detailSearch);
-      default: return 0;
-    }
-  } else {
-    switch(id) {
-      case 'url': return countStr(e.url, detailSearch);
-      case 'status': return e.statusCode ? countStr(String(e.statusCode), detailSearch) : 0;
-      case 'headers': return countKV(e.responseHeaders, detailSearch);
-      case 'body': return countBodyMatches(e.responseBody, detailSearch);
-      default: return 0;
-    }
+  switch(id) {
+    case 'req-url': return countStr(e.url, detailSearch);
+    case 'req-method': return countStr(e.method, detailSearch);
+    case 'req-headers': return countKV(e.requestHeaders, detailSearch);
+    case 'req-query': return countKV(e.queryParameters, detailSearch);
+    case 'req-body': return countBodyMatches(e.requestBody, detailSearch);
+    case 'res-status': return e.statusCode ? countStr(String(e.statusCode), detailSearch) : 0;
+    case 'res-headers': return countKV(e.responseHeaders, detailSearch);
+    case 'res-body': return countBodyMatches(e.responseBody, detailSearch);
+    default: return 0;
   }
 }
 
-function scrollToMatchSection(sectionId) {
-  if (collapsedSections.has(sectionId)) {
-    collapsedSections.delete(sectionId);
-    renderDetail();
+function scrollToMark(mark) {
+  if (!mark) return;
+  const section = mark.closest('.tree-section');
+  if (section) {
+    const sid = section.dataset.section;
+    if (collapsedSections.has(sid)) {
+      collapsedSections.delete(sid);
+      renderDetail();
+      setTimeout(() => {
+        const marks = document.querySelectorAll('#detailBody mark');
+        if (marks[currentMatchSectionIdx]) {
+          highlightActiveMark(marks[currentMatchSectionIdx]);
+          marks[currentMatchSectionIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 50);
+      return;
+    }
   }
-  setTimeout(() => {
-    const el = document.querySelector('.tree-section[data-section="' + sectionId + '"]');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 50);
+  highlightActiveMark(mark);
+  mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function highlightActiveMark(mark) {
+  document.querySelectorAll('#detailBody mark.active-match').forEach(m => m.classList.remove('active-match'));
+  mark.classList.add('active-match');
 }
 
 // ── Helpers ──
@@ -557,8 +564,7 @@ function renderDetail() {
   const body = document.getElementById('detailBody');
   switch (activeDetailTab) {
     case 'overview': body.innerHTML = renderOverview(e); break;
-    case 'request':  body.innerHTML = renderRequestTree(e); break;
-    case 'response': body.innerHTML = renderResponseTree(e); break;
+    case 'requestResponse': body.innerHTML = renderRequestTree(e) + '<hr style="border:none;border-top:1px solid var(--hairline);margin:16px 0">' + renderResponseTree(e); break;
   }
   setupTreeToggles();
   setupCopyBtns();
@@ -572,15 +578,16 @@ function updateMatchBadge() {
   const prevBtn = document.getElementById('searchPrev');
   const nextBtn = document.getElementById('searchNext');
   if (!detailSearch) { badge.style.display='none'; prevBtn.style.display='none'; nextBtn.style.display='none'; return; }
-  const count = countAllMatches();
-  const sections = getMatchingSections();
+  const marks = document.querySelectorAll('#detailBody mark');
+  const count = marks.length;
   badge.style.display = 'inline-block';
   if (count > 0) {
-    const pos = sections.length > 0 ? (currentMatchSectionIdx % sections.length) + 1 : 0;
+    const pos = (currentMatchSectionIdx % count) + 1;
     badge.textContent = pos + ' of ' + count;
     badge.style.background = 'var(--warning)';
     prevBtn.style.display = 'inline-block';
     nextBtn.style.display = 'inline-block';
+    highlightActiveMark(marks[currentMatchSectionIdx % count]);
   } else {
     badge.textContent = '0 results';
     badge.style.background = 'var(--mist)';
@@ -592,21 +599,7 @@ function updateMatchBadge() {
 
 function countAllMatches() {
   if (!selectedEntry || !detailSearch) return 0;
-  const e = selectedEntry;
-  let c = 0;
-  if (activeDetailTab === 'request') {
-    c += countStr(e.url, detailSearch);
-    c += countStr(e.method, detailSearch);
-    c += countKV(e.requestHeaders, detailSearch);
-    c += countKV(e.queryParameters, detailSearch);
-    c += countBodyMatches(e.requestBody, detailSearch);
-  } else {
-    c += countStr(e.url, detailSearch);
-    if (e.statusCode) c += countStr(String(e.statusCode), detailSearch);
-    c += countKV(e.responseHeaders, detailSearch);
-    c += countBodyMatches(e.responseBody, detailSearch);
-  }
-  return c;
+  return document.querySelectorAll('#detailBody mark').length;
 }
 
 function countStr(s, term) { if (!s) return 0; let c=0,i=s.toLowerCase().indexOf(term); while(i>=0){c++;i=s.toLowerCase().indexOf(term,i+1);} return c; }
@@ -740,34 +733,32 @@ function setupCopyBtns() {
 
 // ── Render: Request tree ──
 function renderRequestTree(e) {
-  let html = '';
-  html += treeSection('url', '&#128279;', 'URL', null, detailSearch ? countStr(e.url,detailSearch) : 0,
+  let html = '<div style="font-size:11px;font-weight:700;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Request</div>';
+  html += treeSection('req-url', '&#128279;', 'URL', null, detailSearch ? countStr(e.url,detailSearch) : 0,
     '<div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div>');
-  html += treeSection('method', '&#8593;', 'Method', null, detailSearch ? countStr(e.method,detailSearch) : 0,
+  html += treeSection('req-method', '&#8593;', 'Method', null, detailSearch ? countStr(e.method,detailSearch) : 0,
     '<div style="font-family:var(--mono);font-size:11px">' + highlightText(e.method) + '</div>');
   const reqH = e.requestHeaders || {};
-  html += treeSection('headers', '&#9776;', 'Headers', Object.keys(reqH).length, detailSearch ? countKV(reqH,detailSearch) : 0, kvTreeHTML(reqH));
+  html += treeSection('req-headers', '&#9776;', 'Headers', Object.keys(reqH).length, detailSearch ? countKV(reqH,detailSearch) : 0, kvTreeHTML(reqH));
   const qp = e.queryParameters || {};
   if (Object.keys(qp).length > 0) {
-    html += treeSection('query', '?', 'Query Parameters', Object.keys(qp).length, detailSearch ? countKV(qp,detailSearch) : 0, kvTreeHTML(qp));
+    html += treeSection('req-query', '?', 'Query Parameters', Object.keys(qp).length, detailSearch ? countKV(qp,detailSearch) : 0, kvTreeHTML(qp));
   }
-  html += treeSection('body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.requestBody,detailSearch) : 0, bodyTreeHTML(e.requestBody));
+  html += treeSection('req-body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.requestBody,detailSearch) : 0, bodyTreeHTML(e.requestBody));
   return html;
 }
 
 // ── Render: Response tree ──
 function renderResponseTree(e) {
-  let html = '';
-  html += treeSection('url', '&#128279;', 'URL', null, detailSearch ? countStr(e.url,detailSearch) : 0,
-    '<div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div>');
+  let html = '<div style="font-size:11px;font-weight:700;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Response</div>';
   if (e.statusCode) {
     const sc = statusColorCSS(e.statusCode);
-    html += treeSection('status', '#', 'Status', null, detailSearch ? countStr(String(e.statusCode),detailSearch) : 0,
+    html += treeSection('res-status', '#', 'Status', null, detailSearch ? countStr(String(e.statusCode),detailSearch) : 0,
       '<span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)));
   }
   const resH = e.responseHeaders || {};
-  html += treeSection('headers', '&#9776;', 'Headers', Object.keys(resH).length, detailSearch ? countKV(resH,detailSearch) : 0, kvTreeHTML(resH));
-  html += treeSection('body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.responseBody,detailSearch) : 0, bodyTreeHTML(e.responseBody));
+  html += treeSection('res-headers', '&#9776;', 'Headers', Object.keys(resH).length, detailSearch ? countKV(resH,detailSearch) : 0, kvTreeHTML(resH));
+  html += treeSection('res-body', '&#123;&#125;', 'Body', null, detailSearch ? countBodyMatches(e.responseBody,detailSearch) : 0, bodyTreeHTML(e.responseBody));
   return html;
 }
 

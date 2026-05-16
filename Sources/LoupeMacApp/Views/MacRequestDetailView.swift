@@ -70,37 +70,78 @@ struct MacRequestDetailView: View {
 
     // MARK: - Match Navigation
 
-    private var allSectionIDs: [String] {
-        var ids = ["req-url", "req-method", "req-headers"]
-        if !entry.queryParameters.isEmpty { ids.append("req-query") }
-        ids.append("req-body")
-        ids.append("res-status")
-        ids.append("res-headers")
-        ids.append("res-body")
-        return ids
-    }
-
-    private var matchingSectionIDs: [String] {
+    private var allMatchAnchors: [String] {
         guard !bodySearch.isEmpty else { return [] }
-        return allSectionIDs.filter { sectionMatchCount(id: $0) > 0 }
+        let term = bodySearch.lowercased()
+        var anchors: [String] = []
+
+        // Request sections
+        if entry.url.absoluteString.lowercased().contains(term) { anchors.append("req-url") }
+        if entry.method.lowercased().contains(term) { anchors.append("req-method") }
+        for (k, v) in entry.requestHeaders.sorted(by: { $0.key < $1.key }) {
+            if k.lowercased().contains(term) || v.lowercased().contains(term) {
+                anchors.append("kv-req-headers-\(k)")
+            }
+        }
+        for (k, v) in entry.queryParameters.sorted(by: { $0.key < $1.key }) {
+            if k.lowercased().contains(term) || v.lowercased().contains(term) {
+                anchors.append("kv-req-query-\(k)")
+            }
+        }
+        if let data = entry.requestBody, let tree = MacJSONNode.parse(data) {
+            anchors.append(contentsOf: MacJSONTreeView.matchingNodeIDs(in: tree, term: bodySearch))
+        } else if let data = entry.requestBody, let str = String(data: data, encoding: .utf8), str.lowercased().contains(term) {
+            anchors.append("req-body")
+        }
+
+        // Response sections
+        if let code = entry.statusCode, String(code).contains(term) { anchors.append("res-status") }
+        for (k, v) in entry.responseHeaders.sorted(by: { $0.key < $1.key }) {
+            if k.lowercased().contains(term) || v.lowercased().contains(term) {
+                anchors.append("kv-res-headers-\(k)")
+            }
+        }
+        if let data = entry.responseBody, let tree = MacJSONNode.parse(data) {
+            anchors.append(contentsOf: MacJSONTreeView.matchingNodeIDs(in: tree, term: bodySearch))
+        } else if let data = entry.responseBody, let str = String(data: data, encoding: .utf8), str.lowercased().contains(term) {
+            anchors.append("res-body")
+        }
+
+        return anchors
     }
 
-    private var totalMatchCount: Int {
-        guard !bodySearch.isEmpty else { return 0 }
-        return allSectionIDs.reduce(0) { $0 + sectionMatchCount(id: $1) }
+    private var totalMatchCount: Int { allMatchAnchors.count }
+
+    private func sectionForAnchor(_ anchor: String) -> String? {
+        if anchor.hasPrefix("req-") || anchor.hasPrefix("kv-req-") { return String(anchor.split(separator: "-").prefix(2).joined(separator: "-")) }
+        if anchor.hasPrefix("res-") || anchor.hasPrefix("kv-res-") { return String(anchor.split(separator: "-").prefix(2).joined(separator: "-")) }
+        // UUID from JSON tree — check which body section it belongs to
+        if let data = entry.requestBody, let tree = MacJSONNode.parse(data),
+           MacJSONTreeView.matchingNodeIDs(in: tree, term: bodySearch).contains(anchor) {
+            return "req-body"
+        }
+        return "res-body"
     }
 
     private func navigateMatch(delta: Int, proxy: ScrollViewProxy) {
-        let sections = matchingSectionIDs
-        guard !sections.isEmpty else { return }
-        currentMatchIndex = (currentMatchIndex + delta + sections.count) % sections.count
-        let target = sections[currentMatchIndex]
-        if !expandedSections.contains(target) {
-            expandedSections.insert(target)
+        let anchors = allMatchAnchors
+        guard !anchors.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex + delta + anchors.count) % anchors.count
+        let target = anchors[currentMatchIndex]
+
+        // Expand the parent section if collapsed
+        if let section = sectionForAnchor(target), !expandedSections.contains(section) {
+            expandedSections.insert(section)
         }
+        // For body matches, also expand the body section
+        let bodySection = target.hasPrefix("kv-") ? nil : sectionForAnchor(target)
+        if let bs = bodySection, !expandedSections.contains(bs) {
+            expandedSections.insert(bs)
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             withAnimation(.easeInOut(duration: 0.3)) {
-                proxy.scrollTo(target, anchor: .top)
+                proxy.scrollTo(target, anchor: .center)
             }
         }
     }
@@ -116,9 +157,8 @@ struct MacRequestDetailView: View {
                 .onChange(of: bodySearch) { _ in currentMatchIndex = 0 }
             if !bodySearch.isEmpty {
                 let count = totalMatchCount
-                let sections = matchingSectionIDs
                 if count > 0 {
-                    Text("\(sections.isEmpty ? 0 : (currentMatchIndex % sections.count) + 1) of \(count)")
+                    Text("\(min(currentMatchIndex + 1, count)) of \(count)")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.orange)
                         .padding(.horizontal, 8)
@@ -241,12 +281,12 @@ struct MacRequestDetailView: View {
             }
 
             treeSection(id: "req-headers", title: "Headers (\(entry.requestHeaders.count))", icon: "list.bullet.rectangle") {
-                keyValueTree(entry.requestHeaders)
+                keyValueTree(entry.requestHeaders, sectionId: "req-headers")
             }
 
             if !entry.queryParameters.isEmpty {
                 treeSection(id: "req-query", title: "Query Parameters (\(entry.queryParameters.count))", icon: "questionmark.circle") {
-                    keyValueTree(entry.queryParameters)
+                    keyValueTree(entry.queryParameters, sectionId: "req-query")
                 }
             }
 
@@ -270,7 +310,7 @@ struct MacRequestDetailView: View {
             }
 
             treeSection(id: "res-headers", title: "Headers (\(entry.responseHeaders.count))", icon: "list.bullet.rectangle") {
-                keyValueTree(entry.responseHeaders)
+                keyValueTree(entry.responseHeaders, sectionId: "res-headers")
             }
 
             if entry.responseBody != nil || entry.status.isTerminal {
@@ -297,9 +337,9 @@ struct MacRequestDetailView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         let isExpanded = expandedSections.contains(id)
-        let isCurrentMatch = !matchingSectionIDs.isEmpty
-            && matchingSectionIDs.indices.contains(currentMatchIndex)
-            && matchingSectionIDs[currentMatchIndex] == id
+        let anchors = allMatchAnchors
+        let currentAnchor = anchors.isEmpty ? nil : anchors[min(currentMatchIndex, anchors.count - 1)]
+        let isCurrentMatch = currentAnchor == id || sectionForAnchor(currentAnchor ?? "") == id
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -403,7 +443,7 @@ struct MacRequestDetailView: View {
 
     // MARK: - Key-Value Tree
 
-    private func keyValueTree(_ dict: [String: String]) -> some View {
+    private func keyValueTree(_ dict: [String: String], sectionId: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(dict.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
                 HStack(alignment: .top, spacing: 4) {
@@ -424,6 +464,7 @@ struct MacRequestDetailView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.vertical, 3)
+                .id("kv-\(sectionId)-\(key)")
                 if key != dict.sorted(by: { $0.key < $1.key }).last?.key {
                     Divider()
                 }
