@@ -426,7 +426,11 @@ struct RequestDetailView: View {
                 infoRow("Content-Type", value: entry.responseContentType.displayName)
             }
             if let error = entry.error {
-                infoSection(title: "Error") { infoRow("Domain", value: error.domain); infoRow("Code", value: String(error.code)); infoRow("Message", value: error.localizedDescription) }
+                if error.domain == "NSURLErrorDomain" && error.code == -999 {
+                    infoSection(title: "Error") { infoRow("Status", value: "Request Cancelled") }
+                } else {
+                    infoSection(title: "Error") { infoRow("Domain", value: error.domain); infoRow("Code", value: String(error.code)); infoRow("Message", value: error.localizedDescription) }
+                }
             }
         }
     }
@@ -478,8 +482,7 @@ struct RequestDetailView: View {
                 Image(systemName: entry.isPinned ? "pin.fill" : "pin").foregroundStyle(entry.isPinned ? Color.yellow : Color(uiColor: .label))
             }
             Menu {
-                Button { ExportManager.copyToClipboard(entry.formattedResponseText) } label: { Label("Copy Response", systemImage: "arrow.down.doc") }
-                Button { ExportManager.copyToClipboard(entry.formattedRequestText) } label: { Label("Copy Request", systemImage: "arrow.up.doc") }
+                Button { ExportManager.copyToClipboard(entry.formattedRequestAndResponse) } label: { Label("Copy Request & Response", systemImage: "doc.on.doc") }
                 Button { ExportManager.copyToClipboard(CURLGenerator.generate(from: entry)) } label: { Label("Copy cURL", systemImage: "terminal") }
                 Divider()
                 Button { ExportManager.presentShareSheet(for: [entry], format: .plainText, from: nil) } label: { Label("Share…", systemImage: "square.and.arrow.up") }
@@ -500,14 +503,15 @@ extension NetworkEntry {
         if let obj = try? JSONSerialization.jsonObject(with: data), let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]), let str = String(data: pretty, encoding: .utf8) { return str }
         return String(data: data, encoding: .utf8) ?? "<binary \(data.count) bytes>"
     }
-    var formattedRequestText: String {
-        var out = "URL: \n\(url.absoluteString)\n\nMETHOD: \n\(method)\n\nHEADERS: \n\(headerLiteral(requestHeaders))"
-        let body = bodyString(requestBody); if !body.isEmpty { out += "\n\nBODY: \n\(body)" }; return out
-    }
-    var formattedResponseText: String {
-        var out = "URL: \n\(url.absoluteString)\n\nHEADERS: \n\(headerLiteral(responseHeaders))\n\n"
+    var formattedRequestAndResponse: String {
+        var out = "── REQUEST ──\n\nURL: \n\(url.absoluteString)\n\nMETHOD: \n\(method)\n\nHEADERS: \n\(headerLiteral(requestHeaders))"
+        let reqBody = bodyString(requestBody)
+        if !reqBody.isEmpty { out += "\n\nBODY: \n\(reqBody)" }
+        out += "\n\n── RESPONSE ──\n\n"
         if let code = statusCode { out += "STATUS: \n\(code)\n\n" }
-        let body = bodyString(responseBody); out += "RESPONSE: \n\(body.isEmpty ? "<no body>" : body)"; return out
+        let resBody = bodyString(responseBody)
+        out += "BODY: \n\(resBody.isEmpty ? "<no body>" : resBody)"
+        return out
     }
 }
 

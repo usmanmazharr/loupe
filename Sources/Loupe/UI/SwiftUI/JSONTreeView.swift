@@ -13,10 +13,17 @@ struct JSONTreeView: View {
         self._expanded = State(initialValue: searchTerm.isEmpty ? initiallyExpanded : Self.nodeContainsMatch(node, term: searchTerm))
     }
 
+    private var effectiveExpanded: Bool {
+        if !searchTerm.isEmpty, Self.nodeContainsMatch(node, term: searchTerm) {
+            return true
+        }
+        return expanded
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             rowContent
-            if expanded {
+            if effectiveExpanded {
                 children
             }
         }
@@ -28,7 +35,7 @@ struct JSONTreeView: View {
     private var rowContent: some View {
         HStack(spacing: 4) {
             if !node.isLeaf {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 12)
@@ -104,7 +111,19 @@ struct JSONTreeView: View {
     }
 
     private var highlightedValueText: some View {
-        let summary = valueSummary
+        let isExpanded = effectiveExpanded
+        let summary: String = {
+            switch node {
+            case .object(_, _, let c): return isExpanded ? "{" : "{ \(c.count) field\(c.count == 1 ? "" : "s") }"
+            case .array(_, _, let c):  return isExpanded ? "[" : "[ \(c.count) item\(c.count == 1 ? "" : "s") ]"
+            case .string(_, _, let v): return "\"\(v.truncated(to: 80))\""
+            case .number(_, _, let v):
+                return v.truncatingRemainder(dividingBy: 1) == 0
+                    ? String(format: "%.0f", v) : String(v)
+            case .bool(_, _, let v): return v ? "true" : "false"
+            case .null: return "null"
+            }
+        }()
         if searchTerm.isEmpty {
             return Self.highlight(summary, term: "", baseColor: valueColor)
                 .font(.system(size: 12, design: .monospaced))
@@ -198,19 +217,6 @@ struct JSONTreeView: View {
     }
 
     // MARK: - Helpers
-
-    private var valueSummary: String {
-        switch node {
-        case .object(_, _, let c): return expanded ? "{" : "{ \(c.count) field\(c.count == 1 ? "" : "s") }"
-        case .array(_, _, let c):  return expanded ? "[" : "[ \(c.count) item\(c.count == 1 ? "" : "s") ]"
-        case .string(_, _, let v): return "\"\(v.truncated(to: 80))\""
-        case .number(_, _, let v):
-            return v.truncatingRemainder(dividingBy: 1) == 0
-                ? String(format: "%.0f", v) : String(v)
-        case .bool(_, _, let v): return v ? "true" : "false"
-        case .null: return "null"
-        }
-    }
 
     private var valueColor: Color {
         switch node {

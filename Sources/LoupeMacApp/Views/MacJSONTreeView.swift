@@ -129,10 +129,17 @@ struct MacJSONTreeView: View {
         self._expanded = State(initialValue: searchTerm.isEmpty ? initiallyExpanded : Self.nodeContainsMatch(node, term: searchTerm))
     }
 
+    private var effectiveExpanded: Bool {
+        if !searchTerm.isEmpty, Self.nodeContainsMatch(node, term: searchTerm) {
+            return true
+        }
+        return expanded
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             rowContent
-            if expanded {
+            if effectiveExpanded {
                 childrenView
             }
         }
@@ -142,7 +149,7 @@ struct MacJSONTreeView: View {
     private var rowContent: some View {
         HStack(spacing: 4) {
             if !node.isLeaf {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 12)
@@ -159,8 +166,8 @@ struct MacJSONTreeView: View {
 
             let summary: String = {
                 switch node {
-                case .object(_, _, let c): return expanded ? "{" : "{ \(c.count) field\(c.count == 1 ? "" : "s") }"
-                case .array(_, _, let c):  return expanded ? "[" : "[ \(c.count) item\(c.count == 1 ? "" : "s") ]"
+                case .object(_, _, let c): return effectiveExpanded ? "{" : "{ \(c.count) field\(c.count == 1 ? "" : "s") }"
+                case .array(_, _, let c):  return effectiveExpanded ? "[" : "[ \(c.count) item\(c.count == 1 ? "" : "s") ]"
                 default: return node.valueDisplay
                 }
             }()

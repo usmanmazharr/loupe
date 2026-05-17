@@ -808,7 +808,10 @@ function renderOverview(e) {
   html += kvRow('Status', e.statusCode ? String(e.statusCode) : 'Pending');
   html += kvRow('Duration', fmtDuration(e.timing));
   html += kvRow('Response Size', fmtBytes(e.responseSize));
-  if (e.error) html += kvRow('Error', e.error.localizedDescription);
+  if (e.error) {
+    if (e.error.domain === 'NSURLErrorDomain' && e.error.code === -999) { html += kvRow('Error', 'Request Cancelled'); }
+    else { html += kvRow('Error', e.error.localizedDescription); }
+  }
   html += '</table></div>';
   if (e.timing) {
     html += '<div class="detail-section"><div class="detail-section-title">Timing</div><table class="kv-table">';
