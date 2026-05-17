@@ -525,11 +525,18 @@ function renderNetwork() {
   const list = document.getElementById('entryList');
   let filtered = entries;
   if (methodFilter !== 'ALL') filtered = filtered.filter(e => e.method === methodFilter);
-  if (searchQuery) filtered = filtered.filter(e =>
-    (e.url||'').toLowerCase().includes(searchQuery) ||
-    (e.method||'').toLowerCase().includes(searchQuery) ||
-    String(e.statusCode||'').includes(searchQuery)
-  );
+  if (searchQuery) filtered = filtered.filter(e => {
+    if ((e.url||'').toLowerCase().includes(searchQuery)) return true;
+    if ((e.method||'').toLowerCase().includes(searchQuery)) return true;
+    if (String(e.statusCode||'').includes(searchQuery)) return true;
+    const rh = e.requestHeaders || {};
+    for (const [k,v] of Object.entries(rh)) { if (k.toLowerCase().includes(searchQuery) || (v||'').toLowerCase().includes(searchQuery)) return true; }
+    const qp = e.queryParameters || {};
+    for (const [k,v] of Object.entries(qp)) { if (k.toLowerCase().includes(searchQuery) || (v||'').toLowerCase().includes(searchQuery)) return true; }
+    try { if (e.requestBody && decodeBody(e.requestBody).toLowerCase().includes(searchQuery)) return true; } catch {}
+    try { if (e.responseBody && decodeBody(e.responseBody).toLowerCase().includes(searchQuery)) return true; } catch {}
+    return false;
+  });
   if (filtered.length === 0) {
     list.innerHTML = '<div class="empty"><div class="empty-icon">📡</div>No requests captured yet</div>';
     return;

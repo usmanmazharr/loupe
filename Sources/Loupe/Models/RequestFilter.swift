@@ -92,10 +92,24 @@ public struct RequestFilter {
 
         if !searchText.isEmpty {
             let q = searchText.lowercased()
-            result = result.filter {
-                $0.url.absoluteString.lowercased().contains(q) ||
-                $0.method.lowercased().contains(q) ||
-                $0.statusCode.map { String($0).contains(q) } ?? false
+            result = result.filter { entry in
+                if entry.url.absoluteString.lowercased().contains(q) { return true }
+                if entry.method.lowercased().contains(q) { return true }
+                if entry.statusCode.map({ String($0).contains(q) }) ?? false { return true }
+                if entry.host.lowercased().contains(q) { return true }
+                for (k, v) in entry.requestHeaders {
+                    if k.lowercased().contains(q) || v.lowercased().contains(q) { return true }
+                }
+                for (k, v) in entry.queryParameters {
+                    if k.lowercased().contains(q) || v.lowercased().contains(q) { return true }
+                }
+                if let body = entry.requestBody,
+                   let text = String(data: body, encoding: .utf8),
+                   text.lowercased().contains(q) { return true }
+                if let body = entry.responseBody,
+                   let text = String(data: body, encoding: .utf8),
+                   text.lowercased().contains(q) { return true }
+                return false
             }
         }
         if statusFilter != .all  { result = result.filter { statusFilter.matches($0) } }
