@@ -32,7 +32,7 @@ actor RemoteServer {
     /// Per-connection receive buffers for inbound (macOS→iOS) messages.
     private var receiveBuffers: [ObjectIdentifier: Data] = [:]
 
-    private let deviceInfo = DeviceInfo()
+    private lazy var deviceInfo = DeviceInfo(environmentName: Loupe.shared.configuration.environmentName)
 
     // MARK: - Lifecycle
 
