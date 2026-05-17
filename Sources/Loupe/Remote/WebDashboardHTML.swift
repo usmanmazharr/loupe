@@ -1,7 +1,11 @@
 import Foundation
 
 enum WebDashboardHTML {
-    static let page = """
+    static var page: String {
+        let env = Loupe.shared.configuration.environmentName ?? ""
+        return _page.replacingOccurrences(of: "{{ENV_NAME}}", with: env)
+    }
+    private static let _page = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,6 +32,7 @@ a { color:var(--accent); text-decoration:none; }
 .header { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--hairline); background:var(--card); flex-shrink:0; }
 .logo { font-size:16px; font-weight:700; letter-spacing:-0.3px; }
 .logo span { color:var(--accent); }
+.env-badge { font-size:9px; font-weight:800; letter-spacing:0.5px; color:#fff; padding:2px 8px; border-radius:10px; margin-left:8px; text-transform:uppercase; }
 .conn-dot { width:8px; height:8px; border-radius:50%; background:var(--danger); flex-shrink:0; }
 .conn-dot.on { background:var(--success); }
 .conn-label { font-size:11px; color:var(--fog); }
@@ -174,6 +179,7 @@ mark.active-match { background:#E0AC4A; outline:2px solid #E0AC4A; }
 
 <div class="header">
   <div class="logo">Lou<span>pe</span></div>
+  <span class="env-badge" id="envBadge" style="display:none"></span>
   <div class="conn-dot" id="connDot"></div>
   <div class="conn-label" id="connLabel">Connecting…</div>
   <div class="header-spacer"></div>
@@ -271,6 +277,16 @@ let providerFilter = 'ALL';
 let pollTimer = null;
 let connected = false;
 let collapsedSections = new Set();
+
+// ── Environment badge ──
+const ENV_NAME = '{{ENV_NAME}}';
+if (ENV_NAME) {
+  const eb = document.getElementById('envBadge');
+  eb.textContent = ENV_NAME.toUpperCase();
+  const colors = {production:'#E07070',prod:'#E07070',uat:'#E0AC4A',staging:'#9B59B6',stg:'#9B59B6',dev:'#1B4DFF',development:'#1B4DFF'};
+  eb.style.background = colors[ENV_NAME.toLowerCase()] || '#1B4DFF';
+  eb.style.display = 'inline-block';
+}
 
 // ── Polling ──
 async function poll() {

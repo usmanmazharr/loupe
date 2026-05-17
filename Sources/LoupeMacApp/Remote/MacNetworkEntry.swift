@@ -169,6 +169,7 @@ struct MacDeviceInfo: Codable {
     let appName:    String
     let appVersion: String
     let bundleID:   String
+    let environmentName: String?
 }
 
 // MARK: - Wire Envelope (mirror of iOS RemoteEnvelope)

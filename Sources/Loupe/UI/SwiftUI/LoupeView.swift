@@ -273,6 +273,14 @@ public struct LoupeView: View {
     private var statusStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
+                if let env = Loupe.shared.configuration.environmentName, !env.isEmpty {
+                    Text(env.uppercased())
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(envColor(env), in: Capsule())
+                }
                 statPill(
                     label: "All",
                     icon: "circle.grid.2x2.fill",
@@ -329,6 +337,15 @@ public struct LoupeView: View {
         }
         .buttonStyle(.plain)
         .animation(.easeInOut(duration: 0.15), value: count)
+    }
+
+    private func envColor(_ env: String) -> Color {
+        switch env.lowercased() {
+        case "production", "prod": return .red
+        case "uat":                return .orange
+        case "staging", "stg":     return .purple
+        default:                   return .blue
+        }
     }
 
     // MARK: - Active filter banner

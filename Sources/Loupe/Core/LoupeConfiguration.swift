@@ -62,6 +62,12 @@ public struct LoupeConfiguration {
     /// Replacement string shown for masked values.
     public var maskingString: String = "••••••••"
 
+    // MARK: - Environment
+
+    /// A label shown in the Loupe UI so you can tell at a glance which
+    /// backend the app is talking to (e.g. "UAT", "Production", "Staging").
+    public var environmentName: String?
+
     // MARK: - Appearance
 
     /// Force a specific color scheme for the Loupe UI.

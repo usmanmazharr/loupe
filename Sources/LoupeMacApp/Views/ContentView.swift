@@ -3,6 +3,15 @@ import SwiftUI
 struct ContentView: View {
 
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var client: RemoteClient
+
+    private var navigationTitle: String {
+        var title = "Loupe · \(appState.viewMode.rawValue)"
+        if let env = client.connectedDevice?.info?.environmentName, !env.isEmpty {
+            title += " [\(env.uppercased())]"
+        }
+        return title
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -14,7 +23,7 @@ struct ContentView: View {
         } detail: {
             detail
         }
-        .navigationTitle("Loupe · \(appState.viewMode.rawValue)")
+        .navigationTitle(navigationTitle)
     }
 
     @ViewBuilder

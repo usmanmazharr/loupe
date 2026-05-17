@@ -54,6 +54,7 @@ public struct DeviceInfo: Codable, Sendable {
     public let appName:    String
     public let appVersion: String
     public let bundleID:   String
+    public let environmentName: String?
 
     public init() {
         deviceName = UIDevice.current.name
@@ -62,5 +63,6 @@ public struct DeviceInfo: Codable, Sendable {
                    ?? "Unknown App"
         appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         bundleID   = Bundle.main.bundleIdentifier ?? "unknown"
+        environmentName = Loupe.shared.configuration.environmentName
     }
 }
