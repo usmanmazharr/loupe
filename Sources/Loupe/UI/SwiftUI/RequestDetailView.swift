@@ -55,7 +55,7 @@ struct RequestDetailView: View {
                     Divider()
                 }
 
-                ScrollView(selectedTab == .requestResponse ? [.vertical, .horizontal] : [.vertical]) {
+                ScrollView {
                     Group {
                         switch selectedTab {
                         case .overview:        overviewTab
@@ -67,7 +67,7 @@ struct RequestDetailView: View {
                     .id(selectedTab)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
-                    .frame(minWidth: selectedTab == .requestResponse ? 600 : nil, maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 40)
                 }
             }
@@ -274,11 +274,12 @@ struct RequestDetailView: View {
                     hlText(key + ":", baseColor: .jsonKey).font(.system(size: 12, weight: .medium, design: .monospaced))
                     hlText(value, baseColor: .secondary).font(.system(size: 12, design: .monospaced)).lineLimit(3)
                     Spacer()
-                    Button { ExportManager.copyToClipboard(value) } label: {
-                        Image(systemName: "doc.on.doc").font(.system(size: 10)).foregroundStyle(.tertiary)
-                    }.buttonStyle(.plain)
                 }
                 .padding(.vertical, 3)
+                .contextMenu {
+                    Button { ExportManager.copyToClipboard(value) } label: { Label("Copy Value", systemImage: "doc.on.doc") }
+                    Button { ExportManager.copyToClipboard(key) } label: { Label("Copy Key", systemImage: "textformat") }
+                }
                 .id("kv-\(sectionId)-\(key)")
             }
         }
@@ -289,13 +290,18 @@ struct RequestDetailView: View {
         if let tree {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Body").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-                JSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
+                ScrollView(.horizontal, showsIndicators: true) {
+                    JSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
+                        .frame(minWidth: 500)
+                }
                 cpyBtn(data)
             }
         } else if let data, !data.isEmpty, let str = String(data: data, encoding: .utf8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Body").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-                hlMono(str).textSelection(.enabled)
+                ScrollView(.horizontal, showsIndicators: true) {
+                    hlMono(str).textSelection(.enabled)
+                }
                 cpyBtn(data)
             }
         } else {

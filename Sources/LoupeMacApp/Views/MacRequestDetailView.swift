@@ -32,14 +32,14 @@ struct MacRequestDetailView: View {
 
             ScrollViewReader { proxy in
                 if tab == .requestResponse { searchBar(proxy: proxy); Divider() }
-                ScrollView(tab == .requestResponse ? [.vertical, .horizontal] : [.vertical]) {
+                ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         switch tab {
                         case .overview: overviewTab
                         case .requestResponse: requestResponseTab
                         case .curl: curlTab
                         }
-                    }.padding(.horizontal, 16).padding(.vertical, 16).frame(minWidth: tab == .requestResponse ? 700 : nil, maxWidth: .infinity, alignment: .leading)
+                    }.padding(.horizontal, 16).padding(.vertical, 16).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -196,10 +196,13 @@ struct MacRequestDetailView: View {
                     hlText(key + ":", baseColor: .blue).font(.system(size: 12, weight: .medium, design: .monospaced))
                     hlText(value, baseColor: .secondary).font(.system(size: 12, design: .monospaced)).lineLimit(3)
                     Spacer()
-                    Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string) } label: {
-                        Image(systemName: "doc.on.doc").font(.system(size: 10)).foregroundStyle(.tertiary)
-                    }.buttonStyle(.plain)
-                }.padding(.vertical, 3).id("kv-\(sectionId)-\(key)")
+                }
+                .padding(.vertical, 3)
+                .contextMenu {
+                    Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string) } label: { Label("Copy Value", systemImage: "doc.on.doc") }
+                    Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(key, forType: .string) } label: { Label("Copy Key", systemImage: "textformat") }
+                }
+                .id("kv-\(sectionId)-\(key)")
             }
         }
     }
@@ -209,13 +212,18 @@ struct MacRequestDetailView: View {
         if let tree {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Body").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-                MacJSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
+                ScrollView(.horizontal, showsIndicators: true) {
+                    MacJSONTreeView(node: tree, initiallyExpanded: true, searchTerm: bodySearch)
+                        .frame(minWidth: 600)
+                }
                 cpyBtn(data)
             }
         } else if let data, !data.isEmpty, let str = String(data: data, encoding: .utf8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Body").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-                hlMono(str).textSelection(.enabled)
+                ScrollView(.horizontal, showsIndicators: true) {
+                    hlMono(str).textSelection(.enabled)
+                }
                 cpyBtn(data)
             }
         } else {

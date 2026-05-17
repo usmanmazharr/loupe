@@ -64,22 +64,19 @@ struct JSONTreeView: View {
                         .background(Color.orange, in: Capsule())
                 }
             }
-
-            if node.isLeaf {
-                Button {
-                    ExportManager.copyToClipboard(node.typeLabel)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
             if !node.isLeaf {
                 withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
+            }
+        }
+        .contextMenu {
+            if node.isLeaf {
+                Button { ExportManager.copyToClipboard(node.typeLabel) } label: { Label("Copy Value", systemImage: "doc.on.doc") }
+            }
+            if let key = node.key {
+                Button { ExportManager.copyToClipboard(key) } label: { Label("Copy Key", systemImage: "textformat") }
             }
         }
         .id(node.id.uuidString)

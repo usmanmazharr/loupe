@@ -189,23 +189,19 @@ struct MacJSONTreeView: View {
                         .background(Color.orange, in: Capsule())
                 }
             }
-
-            if node.isLeaf {
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(node.valueDisplay, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
             if !node.isLeaf {
                 withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
+            }
+        }
+        .contextMenu {
+            if node.isLeaf {
+                Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(node.valueDisplay, forType: .string) } label: { Label("Copy Value", systemImage: "doc.on.doc") }
+            }
+            if let key = node.key {
+                Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(key, forType: .string) } label: { Label("Copy Key", systemImage: "textformat") }
             }
         }
         .id(node.id.uuidString)

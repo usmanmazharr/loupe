@@ -110,7 +110,7 @@ pre.body-block { background:var(--surface); border-radius:8px; padding:12px; fon
 .tree-kv-val { color:var(--fog); word-break:break-all; flex:1; }
 .field-row { margin-bottom:10px; }
 .field-label { display:block; font-size:10px; font-weight:600; color:var(--fog); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
-.json-tree { font-family:var(--mono); font-size:11px; }
+.json-tree { font-family:var(--mono); font-size:11px; overflow-x:auto; }
 .json-node { padding:1px 0; }
 .json-toggle { cursor:pointer; color:var(--fog); display:inline-block; width:14px; font-size:10px; user-select:none; }
 .json-key { color:#C792EA; }
@@ -693,10 +693,11 @@ function bodyTreeHTML(data) {
 
 function jsonNodeHTML(val, key, expanded) {
   const keyStr = key !== null ? '<span class="json-key">' + highlightText('"'+key+'"') + '</span>: ' : '';
-  if (val === null) return '<div class="json-node">' + keyStr + '<span class="json-null">null</span></div>';
-  if (typeof val === 'boolean') return '<div class="json-node">' + keyStr + '<span class="json-bool">' + val + '</span></div>';
-  if (typeof val === 'number') return '<div class="json-node">' + keyStr + '<span class="json-num">' + highlightText(String(val)) + '</span></div>';
-  if (typeof val === 'string') return '<div class="json-node">' + keyStr + '<span class="json-str">' + highlightText('"'+val.substring(0,200)+(val.length>200?'…':'')+'"') + '</span></div>';
+  const keyAttr = key !== null ? ' data-jkey="' + escapeHTML(String(key)) + '"' : '';
+  if (val === null) return '<div class="json-node json-leaf"' + keyAttr + ' data-jval="null">' + keyStr + '<span class="json-null">null</span></div>';
+  if (typeof val === 'boolean') return '<div class="json-node json-leaf"' + keyAttr + ' data-jval="' + val + '">' + keyStr + '<span class="json-bool">' + val + '</span></div>';
+  if (typeof val === 'number') return '<div class="json-node json-leaf"' + keyAttr + ' data-jval="' + val + '">' + keyStr + '<span class="json-num">' + highlightText(String(val)) + '</span></div>';
+  if (typeof val === 'string') return '<div class="json-node json-leaf"' + keyAttr + ' data-jval="' + escapeHTML(val) + '">' + keyStr + '<span class="json-str">' + highlightText('"'+val.substring(0,200)+(val.length>200?'…':'')+'"') + '</span></div>';
   if (Array.isArray(val)) {
     const id = 'jtree_' + Math.random().toString(36).substr(2,8);
     const mc = detailSearch ? countJSONMatches(val) : 0;
@@ -762,6 +763,10 @@ function setupTreeToggles() {
 function setupCopyBtns() {
   document.querySelectorAll('[data-copy]').forEach(btn => {
     btn.addEventListener('click', () => copyText(btn.dataset.copy));
+  });
+  document.querySelectorAll('.json-leaf').forEach(el => {
+    el.style.cursor = 'context-menu';
+    el.addEventListener('dblclick', () => { if (el.dataset.jval) copyText(el.dataset.jval); });
   });
 }
 

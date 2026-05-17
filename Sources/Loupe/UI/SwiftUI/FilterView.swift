@@ -91,16 +91,6 @@ struct FilterView: View {
                         }
                         .tint(.blue)
 
-                        Toggle(isOn: $filter.showOnlyMocked) {
-                            Label {
-                                Text("Mocked only")
-                                    .font(.system(size: 14))
-                            } icon: {
-                                Image(systemName: "theatermasks.fill")
-                                    .foregroundStyle(Color.purple)
-                            }
-                        }
-                        .tint(.blue)
                     } header: { sectionHeader("Options") }
 
                     // MARK: - Clear all (always shown when any filter active)
