@@ -55,7 +55,7 @@ struct RequestDetailView: View {
                     Divider()
                 }
 
-                ScrollView {
+                ScrollView(selectedTab == .requestResponse ? [.vertical, .horizontal] : [.vertical]) {
                     Group {
                         switch selectedTab {
                         case .overview:        overviewTab
@@ -67,7 +67,7 @@ struct RequestDetailView: View {
                     .id(selectedTab)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minWidth: selectedTab == .requestResponse ? 600 : nil, maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 40)
                 }
             }

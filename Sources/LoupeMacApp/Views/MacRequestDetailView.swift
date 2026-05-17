@@ -32,14 +32,14 @@ struct MacRequestDetailView: View {
 
             ScrollViewReader { proxy in
                 if tab == .requestResponse { searchBar(proxy: proxy); Divider() }
-                ScrollView {
+                ScrollView(tab == .requestResponse ? [.vertical, .horizontal] : [.vertical]) {
                     VStack(alignment: .leading, spacing: 16) {
                         switch tab {
                         case .overview: overviewTab
                         case .requestResponse: requestResponseTab
                         case .curl: curlTab
                         }
-                    }.padding(.horizontal, 16).padding(.vertical, 16).frame(maxWidth: .infinity, alignment: .leading)
+                    }.padding(.horizontal, 16).padding(.vertical, 16).frame(minWidth: tab == .requestResponse ? 700 : nil, maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
