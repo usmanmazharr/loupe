@@ -45,6 +45,10 @@ struct MacRequestDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { parseTrees() }
+        .onChange(of: entry.id) { _ in parseTrees() }
+        .onChange(of: entry.responseBody) { _ in parseTrees() }
+        .onChange(of: entry.requestBody) { _ in parseTrees() }
+        .id(entry.id)
     }
 
     private func parseTrees() {
