@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Middle column: searchable, filterable table of network entries.
 struct MacConsoleView: View {
@@ -6,25 +7,34 @@ struct MacConsoleView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: RemoteClient
     @State private var search = ""
+    @State private var debouncedSearch = ""
     @State private var methodFilter = "All"
     @State private var semanticSearchOn = false
+    @State private var debounceTask: DispatchWorkItem?
 
     private let methods = ["All", "GET", "POST", "PUT", "PATCH", "DELETE"]
 
     var filtered: [MacNetworkEntry] {
+        let q = debouncedSearch
         let literal = appState.entries.filter { entry in
             let matchesSearch: Bool = {
-                guard !search.isEmpty, !semanticSearchOn else { return true }
-                if entry.url.absoluteString.localizedCaseInsensitiveContains(search) { return true }
-                if entry.host.localizedCaseInsensitiveContains(search) { return true }
-                if entry.path.localizedCaseInsensitiveContains(search) { return true }
-                if let code = entry.statusCode, String(code).contains(search) { return true }
+                guard !q.isEmpty, !semanticSearchOn else { return true }
+                if entry.url.absoluteString.localizedCaseInsensitiveContains(q) { return true }
+                if entry.host.localizedCaseInsensitiveContains(q) { return true }
+                if entry.path.localizedCaseInsensitiveContains(q) { return true }
+                if let code = entry.statusCode, String(code).contains(q) { return true }
+                for (k, v) in entry.requestHeaders {
+                    if k.localizedCaseInsensitiveContains(q) || v.localizedCaseInsensitiveContains(q) { return true }
+                }
+                for (k, v) in entry.queryParameters {
+                    if k.localizedCaseInsensitiveContains(q) || v.localizedCaseInsensitiveContains(q) { return true }
+                }
                 if let body = entry.responseBody,
                    let text = String(data: body, encoding: .utf8),
-                   text.localizedCaseInsensitiveContains(search) { return true }
+                   text.localizedCaseInsensitiveContains(q) { return true }
                 if let body = entry.requestBody,
                    let text = String(data: body, encoding: .utf8),
-                   text.localizedCaseInsensitiveContains(search) { return true }
+                   text.localizedCaseInsensitiveContains(q) { return true }
                 return false
             }()
             let matchesMethod = methodFilter == "All" || entry.method == methodFilter
@@ -32,10 +42,10 @@ struct MacConsoleView: View {
         }
 
         guard semanticSearchOn,
-              !search.trimmingCharacters(in: .whitespaces).isEmpty
+              !q.trimmingCharacters(in: .whitespaces).isEmpty
         else { return literal }
 
-        let ranked = MacSemanticSearch.shared.rank(literal, query: search)
+        let ranked = MacSemanticSearch.shared.rank(literal, query: q)
         return ranked.isEmpty ? literal : ranked
     }
 
@@ -47,7 +57,7 @@ struct MacConsoleView: View {
                 TextField("Search URL, host, path, body, status…", text: $search)
                     .textFieldStyle(.roundedBorder)
                 if !search.isEmpty {
-                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    Button { search = ""; debouncedSearch = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                 }
@@ -123,6 +133,12 @@ struct MacConsoleView: View {
             }
 
             Divider()
+            .onChange(of: search) { newValue in
+                debounceTask?.cancel()
+                let task = DispatchWorkItem { debouncedSearch = newValue }
+                debounceTask = task
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: task)
+            }
 
             // Status bar
             HStack {

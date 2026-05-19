@@ -205,6 +205,15 @@ mark.active-match { background:#E0AC4A; outline:2px solid #E0AC4A; }
     <div class="method-pill" data-method="PATCH">PATCH</div>
     <div class="method-pill" data-method="DELETE">DELETE</div>
   </div>
+  <div class="filter-bar" id="statusFilterBar">
+    <span class="filter-label">STATUS</span>
+    <div class="method-pill active" data-status="ALL">ALL</div>
+    <div class="method-pill" data-status="2xx">2xx</div>
+    <div class="method-pill" data-status="3xx">3xx</div>
+    <div class="method-pill" data-status="4xx">4xx</div>
+    <div class="method-pill" data-status="5xx">5xx</div>
+    <div class="method-pill" data-status="FAILED">Failed</div>
+  </div>
   <div class="entry-list" id="entryList"></div>
   <div class="detail-overlay" id="detailPanel">
     <div class="detail-header">
@@ -274,9 +283,13 @@ let currentMatchSectionIdx = 0;
 let methodFilter = 'ALL';
 let levelFilters = new Set();
 let providerFilter = 'ALL';
+let statusFilter = 'ALL';
 let pollTimer = null;
 let connected = false;
 let collapsedSections = new Set();
+let searchDebounce = null;
+let detailSearchDebounce = null;
+const bodyTextCache = new Map();
 
 // ── Environment badge ──
 const ENV_NAME = '{{ENV_NAME}}';
@@ -351,8 +364,12 @@ document.getElementById('tabBar').addEventListener('click', (e) => {
 
 // ── Search ──
 document.getElementById('searchBox').addEventListener('input', (e) => {
-  searchQuery = e.target.value.toLowerCase();
-  renderNetwork(); renderConsole(); renderAnalytics();
+  clearTimeout(searchDebounce);
+  const val = e.target.value.toLowerCase();
+  searchDebounce = setTimeout(() => {
+    searchQuery = val;
+    renderNetwork(); renderConsole(); renderAnalytics();
+  }, 250);
 });
 
 // ── Method filter ──
@@ -361,6 +378,16 @@ document.getElementById('methodFilter').addEventListener('click', (e) => {
   if (!pill) return;
   methodFilter = pill.dataset.method;
   document.querySelectorAll('#methodFilter .method-pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  renderNetwork();
+});
+
+// ── Status filter ──
+document.getElementById('statusFilterBar').addEventListener('click', (e) => {
+  const pill = e.target.closest('.method-pill');
+  if (!pill) return;
+  statusFilter = pill.dataset.status;
+  document.querySelectorAll('#statusFilterBar .method-pill').forEach(p => p.classList.remove('active'));
   pill.classList.add('active');
   renderNetwork();
 });
@@ -397,9 +424,13 @@ document.getElementById('detailTabs').addEventListener('click', (e) => {
 });
 
 document.getElementById('detailSearchInput').addEventListener('input', (e) => {
-  detailSearch = e.target.value.toLowerCase();
-  currentMatchSectionIdx = 0;
-  renderDetail();
+  clearTimeout(detailSearchDebounce);
+  const val = e.target.value.toLowerCase();
+  detailSearchDebounce = setTimeout(() => {
+    detailSearch = val;
+    currentMatchSectionIdx = 0;
+    renderDetail();
+  }, 200);
 });
 document.getElementById('searchPrev').addEventListener('click', () => {
   const marks = document.querySelectorAll('#detailBody mark');
@@ -519,12 +550,34 @@ function prettyJSON(data) {
 }
 function escapeHTML(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function copyText(t) { navigator.clipboard.writeText(t).then(() => {}); }
+function decodeBody(data) {
+  if (!data) return '';
+  if (bodyTextCache.has(data)) return bodyTextCache.get(data);
+  let result = '';
+  try {
+    const bytes = atob(data);
+    result = new TextDecoder().decode(Uint8Array.from(bytes, c => c.charCodeAt(0)));
+  } catch {}
+  bodyTextCache.set(data, result);
+  return result;
+}
 
 // ── Render: Network ──
 function renderNetwork() {
   const list = document.getElementById('entryList');
-  let filtered = entries;
+  let filtered = entries.slice();
   if (methodFilter !== 'ALL') filtered = filtered.filter(e => e.method === methodFilter);
+  if (statusFilter !== 'ALL') filtered = filtered.filter(e => {
+    const code = e.statusCode;
+    switch (statusFilter) {
+      case '2xx': return code && code >= 200 && code < 300;
+      case '3xx': return code && code >= 300 && code < 400;
+      case '4xx': return code && code >= 400 && code < 500;
+      case '5xx': return code && code >= 500;
+      case 'FAILED': return e.status === 'failed' || !!e.error;
+      default: return true;
+    }
+  });
   if (searchQuery) filtered = filtered.filter(e => {
     if ((e.url||'').toLowerCase().includes(searchQuery)) return true;
     if ((e.method||'').toLowerCase().includes(searchQuery)) return true;
@@ -772,6 +825,7 @@ function setupCopyBtns() {
 
 // ── Render: Request section (combined) ──
 function renderRequestTree(e) {
+  const collapsed = collapsedSections.has('request');
   let reqMatchCount = 0;
   if (detailSearch) {
     reqMatchCount += countStr(e.url, detailSearch);
@@ -781,45 +835,61 @@ function renderRequestTree(e) {
     reqMatchCount += countBodyMatches(e.requestBody, detailSearch);
   }
   const badge = reqMatchCount > 0 ? '<span class="tree-section-match">' + reqMatchCount + '</span>' : '';
+  const chevron = collapsed ? '&#9654;' : '&#9660;';
   let html = '<div class="tree-section" data-section="request"><div class="tree-section-header" data-section="request">' +
-    '<span class="tree-chevron">&#9660;</span>' +
+    '<span class="tree-chevron">' + chevron + '</span>' +
     '<span class="tree-section-icon">&#8593;</span>' +
     '<span class="tree-section-title">Request</span>' + badge + '</div>';
-  html += '<div class="tree-section-body">';
-  html += '<div class="field-row"><span class="field-label">URL</span><div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div></div>';
-  html += '<div class="field-row"><span class="field-label">Method</span><div style="font-family:var(--mono);font-size:11px">' + highlightText(e.method) + '</div></div>';
-  const reqH = e.requestHeaders || {};
-  if (Object.keys(reqH).length > 0) {
-    html += '<div class="field-row"><span class="field-label">Headers</span>' + kvTreeHTML(reqH) + '</div>';
+  if (!collapsed) {
+    html += '<div class="tree-section-body">';
+    html += '<div class="field-row"><span class="field-label">URL</span><div style="font-family:var(--mono);font-size:11px;word-break:break-all">' + highlightText(e.url) + '</div></div>';
+    html += '<div class="field-row"><span class="field-label">Method</span><div style="font-family:var(--mono);font-size:11px">' + highlightText(e.method) + '</div></div>';
+    const reqH = e.requestHeaders || {};
+    if (Object.keys(reqH).length > 0) {
+      html += '<div class="field-row"><span class="field-label">Headers</span>' + kvTreeHTML(reqH) + '</div>';
+    }
+    const qp = e.queryParameters || {};
+    if (Object.keys(qp).length > 0) {
+      html += '<div class="field-row"><span class="field-label">Query Parameters</span>' + kvTreeHTML(qp) + '</div>';
+    }
+    html += '<div class="field-row"><span class="field-label">Body</span>' + bodyTreeHTML(e.requestBody) + '</div>';
+    html += '</div>';
   }
-  const qp = e.queryParameters || {};
-  if (Object.keys(qp).length > 0) {
-    html += '<div class="field-row"><span class="field-label">Query Parameters</span>' + kvTreeHTML(qp) + '</div>';
-  }
-  html += '<div class="field-row"><span class="field-label">Body</span>' + bodyTreeHTML(e.requestBody) + '</div>';
-  html += '</div></div>';
+  html += '</div>';
   return html;
 }
 
 // ── Render: Response section (combined) ──
 function renderResponseTree(e) {
+  const collapsed = collapsedSections.has('response');
   let resMatchCount = 0;
   if (detailSearch) {
     if (e.statusCode) resMatchCount += countStr(String(e.statusCode), detailSearch);
     resMatchCount += countBodyMatches(e.responseBody, detailSearch);
   }
   const badge = resMatchCount > 0 ? '<span class="tree-section-match">' + resMatchCount + '</span>' : '';
+  const chevron = collapsed ? '&#9654;' : '&#9660;';
   let html = '<div class="tree-section" data-section="response"><div class="tree-section-header" data-section="response">' +
-    '<span class="tree-chevron">&#9660;</span>' +
+    '<span class="tree-chevron">' + chevron + '</span>' +
     '<span class="tree-section-icon">&#8595;</span>' +
     '<span class="tree-section-title">Response</span>' + badge + '</div>';
-  html += '<div class="tree-section-body">';
-  if (e.statusCode) {
-    const sc = statusColorCSS(e.statusCode);
-    html += '<div class="field-row"><span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)) + '</div>';
+  if (!collapsed) {
+    html += '<div class="tree-section-body">';
+    if (e.statusCode) {
+      const sc = statusColorCSS(e.statusCode);
+      html += '<div class="field-row"><span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)) + '</div>';
+    }
+    if (e.error) {
+      if (e.error.domain === 'NSURLErrorDomain' && e.error.code === -999) {
+        html += '<div class="field-row"><span style="color:var(--warning);font-weight:600">Request Cancelled</span></div>';
+      } else {
+        html += '<div class="field-row"><span style="color:var(--danger);font-weight:600">' + escapeHTML(e.error.localizedDescription || e.error.domain + ' ' + e.error.code) + '</span></div>';
+      }
+    }
+    html += bodyTreeHTML(e.responseBody);
+    html += '</div>';
   }
-  html += bodyTreeHTML(e.responseBody);
-  html += '</div></div>';
+  html += '</div>';
   return html;
 }
 

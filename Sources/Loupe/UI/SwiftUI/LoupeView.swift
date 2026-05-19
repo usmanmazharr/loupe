@@ -42,6 +42,7 @@ public final class LoupeViewModel: ObservableObject {
     @Published var allEntries:        [NetworkEntry] = []
     @Published var filter             = RequestFilter()
     @Published var searchText         = ""
+    @Published private(set) var debouncedSearchText = ""
     @Published var activeStatusFilter: StatusFilter  = .all
     @Published var isGrouped          = true
     @Published var semanticSearchOn   = false
@@ -53,7 +54,7 @@ public final class LoupeViewModel: ObservableObject {
 
     var filteredEntries: [NetworkEntry] {
         var f          = filter
-        f.searchText   = semanticSearchOn ? "" : searchText
+        f.searchText   = semanticSearchOn ? "" : debouncedSearchText
         f.statusFilter = activeStatusFilter
         let literal = f.apply(to: allEntries)
 
@@ -103,7 +104,7 @@ public final class LoupeViewModel: ObservableObject {
 
     var activeFilterCount: Int {
         var n = 0
-        if !searchText.isEmpty             { n += 1 }
+        if !debouncedSearchText.isEmpty    { n += 1 }
         if activeStatusFilter != .all      { n += 1 }
         if filter.methodFilter != .all     { n += 1 }
         if !filter.excludedDomains.isEmpty { n += 1 }
@@ -127,6 +128,12 @@ public final class LoupeViewModel: ObservableObject {
         LogManager.shared.entriesPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.allEntries = $0 }
+            .store(in: &cancellables)
+
+        $searchText
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .removeDuplicates()
+            .sink { [weak self] in self?.debouncedSearchText = $0 }
             .store(in: &cancellables)
     }
 }
