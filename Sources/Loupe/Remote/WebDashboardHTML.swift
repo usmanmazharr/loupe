@@ -167,6 +167,10 @@ mark.active-match { background:#E0AC4A; outline:2px solid #E0AC4A; }
 .method-pill { font-size:10px; font-weight:600; padding:3px 10px; border-radius:50px; cursor:pointer; border:1px solid var(--hairline); color:var(--fog); background:transparent; font-family:var(--mono); }
 .method-pill.active { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
 .filter-label { font-size:10px; color:var(--mist); font-weight:600; margin-right:4px; }
+.domain-pill { font-size:10px; font-weight:500; padding:3px 10px; border-radius:50px; cursor:pointer; border:1px solid var(--hairline); color:var(--fog); background:transparent; font-family:var(--mono); transition:all .15s; }
+.domain-pill.active { border-color:var(--success); color:var(--success); background:rgba(79,190,122,0.12); }
+.domain-pill.excluded { border-color:var(--danger); color:var(--danger); background:rgba(224,112,112,0.08); text-decoration:line-through; opacity:0.6; }
+.domain-bar { display:flex; gap:4px; padding:6px 20px; border-bottom:1px solid var(--hairline); flex-shrink:0; flex-wrap:wrap; align-items:center; }
 
 @media (max-width: 768px) {
   .detail-overlay { width:100%; }
@@ -213,6 +217,9 @@ mark.active-match { background:#E0AC4A; outline:2px solid #E0AC4A; }
     <div class="method-pill" data-status="4xx">4xx</div>
     <div class="method-pill" data-status="5xx">5xx</div>
     <div class="method-pill" data-status="FAILED">Failed</div>
+  </div>
+  <div class="domain-bar" id="domainFilterBar" style="display:none">
+    <span class="filter-label">DOMAINS</span>
   </div>
   <div class="entry-list" id="entryList"></div>
   <div class="detail-overlay" id="detailPanel">
@@ -287,6 +294,8 @@ let statusFilter = 'ALL';
 let pollTimer = null;
 let connected = false;
 let collapsedSections = new Set();
+let excludedDomains = new Set();
+let knownDomains = new Set();
 let searchDebounce = null;
 let detailSearchDebounce = null;
 const bodyTextCache = new Map();
@@ -389,6 +398,23 @@ document.getElementById('statusFilterBar').addEventListener('click', (e) => {
   statusFilter = pill.dataset.status;
   document.querySelectorAll('#statusFilterBar .method-pill').forEach(p => p.classList.remove('active'));
   pill.classList.add('active');
+  renderNetwork();
+});
+
+// ── Domain filter ──
+document.getElementById('domainFilterBar').addEventListener('click', (e) => {
+  const pill = e.target.closest('.domain-pill');
+  if (!pill) return;
+  const domain = pill.dataset.domain;
+  if (excludedDomains.has(domain)) {
+    excludedDomains.delete(domain);
+    pill.classList.remove('excluded');
+    pill.classList.add('active');
+  } else {
+    excludedDomains.add(domain);
+    pill.classList.remove('active');
+    pill.classList.add('excluded');
+  }
   renderNetwork();
 });
 
@@ -563,10 +589,34 @@ function decodeBody(data) {
 }
 
 // ── Render: Network ──
+function updateDomainPills() {
+  let changed = false;
+  entries.forEach(e => {
+    try { const h = new URL(e.url).host; if (!knownDomains.has(h)) { knownDomains.add(h); changed = true; } } catch {}
+  });
+  if (!changed) return;
+  const bar = document.getElementById('domainFilterBar');
+  bar.style.display = knownDomains.size > 0 ? 'flex' : 'none';
+  const label = bar.querySelector('.filter-label');
+  bar.innerHTML = '';
+  bar.appendChild(label || Object.assign(document.createElement('span'), { className:'filter-label', textContent:'DOMAINS' }));
+  [...knownDomains].sort().forEach(domain => {
+    const pill = document.createElement('div');
+    pill.className = 'domain-pill' + (excludedDomains.has(domain) ? ' excluded' : ' active');
+    pill.dataset.domain = domain;
+    pill.textContent = domain;
+    bar.appendChild(pill);
+  });
+}
+
 function renderNetwork() {
+  updateDomainPills();
   const list = document.getElementById('entryList');
   let filtered = entries.slice();
   if (methodFilter !== 'ALL') filtered = filtered.filter(e => e.method === methodFilter);
+  if (excludedDomains.size > 0) filtered = filtered.filter(e => {
+    try { return !excludedDomains.has(new URL(e.url).host); } catch { return true; }
+  });
   if (statusFilter !== 'ALL') filtered = filtered.filter(e => {
     const code = e.statusCode;
     switch (statusFilter) {
