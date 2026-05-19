@@ -643,7 +643,6 @@ function renderDetail() {
     case 'overview': body.innerHTML = renderOverview(e); break;
     case 'requestResponse': body.innerHTML = renderRequestTree(e) + '<hr style="border:none;border-top:1px solid var(--hairline);margin:16px 0">' + renderResponseTree(e); break;
   }
-  setupTreeToggles();
   setupCopyBtns();
   updateMatchBadge();
   const curlBtn = document.getElementById('copyCurlBtn');
@@ -793,25 +792,28 @@ function countJSONMatches(val) {
   return countStr(str, detailSearch);
 }
 
-function setupTreeToggles() {
-  document.querySelectorAll('.tree-section-header').forEach(h => {
-    h.addEventListener('click', () => {
-      const sid = h.dataset.section;
-      if (collapsedSections.has(sid)) collapsedSections.delete(sid); else collapsedSections.add(sid);
-      renderDetail();
-    });
-  });
-  document.querySelectorAll('.json-toggle').forEach(t => {
-    t.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const target = document.getElementById(t.dataset.tree);
-      if (!target) return;
-      const visible = target.style.display !== 'none';
-      target.style.display = visible ? 'none' : 'block';
-      t.innerHTML = visible ? '&#9654;' : '&#9660;';
-    });
-  });
-}
+// Event delegation for tree toggles — attached once, survives re-renders
+document.getElementById('detailBody').addEventListener('click', (ev) => {
+  // Handle collapsible section headers (Request / Response)
+  const header = ev.target.closest('.tree-section-header');
+  if (header && header.dataset.section) {
+    ev.stopPropagation();
+    const sid = header.dataset.section;
+    if (collapsedSections.has(sid)) collapsedSections.delete(sid); else collapsedSections.add(sid);
+    renderDetail();
+    return;
+  }
+  // Handle JSON tree node toggles
+  const toggle = ev.target.closest('.json-toggle');
+  if (toggle) {
+    ev.stopPropagation();
+    const target = document.getElementById(toggle.dataset.tree);
+    if (!target) return;
+    const visible = target.style.display !== 'none';
+    target.style.display = visible ? 'none' : 'block';
+    toggle.innerHTML = visible ? '&#9654;' : '&#9660;';
+  }
+});
 
 function setupCopyBtns() {
   document.querySelectorAll('[data-copy]').forEach(btn => {
