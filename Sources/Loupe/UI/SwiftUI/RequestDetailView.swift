@@ -432,7 +432,11 @@ struct RequestDetailView: View {
                 infoRow("Content-Type", value: entry.responseContentType.displayName)
             }
             if let error = entry.error {
-                if error.domain == "NSURLErrorDomain" && error.code == -999 {
+                let isCancelled = error.domain == "NSURLErrorDomain" && error.code == -999
+                let hasValidResponse = entry.statusCode != nil
+                if isCancelled && hasValidResponse {
+                    // Response was received before cancellation — don't show error
+                } else if isCancelled {
                     infoSection(title: "Error") { infoRow("Status", value: "Request Cancelled") }
                 } else {
                     infoSection(title: "Error") { infoRow("Domain", value: error.domain); infoRow("Code", value: String(error.code)); infoRow("Message", value: error.localizedDescription) }

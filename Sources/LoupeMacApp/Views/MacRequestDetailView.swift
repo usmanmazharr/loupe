@@ -293,7 +293,11 @@ struct MacRequestDetailView: View {
             }
             infoSection("Response") { row("Status", entry.statusCode.map { "\($0) \(HTTPURLResponse.localizedString(forStatusCode: $0))" } ?? "—"); row("Size", entry.responseSize > 0 ? entry.responseSize.macFormattedSize : "—"); row("Content-Type", entry.responseContentType.displayName) }
             if let err = entry.error {
-                if err.domain == "NSURLErrorDomain" && err.code == -999 {
+                let isCancelled = err.domain == "NSURLErrorDomain" && err.code == -999
+                let hasValidResponse = entry.statusCode != nil
+                if isCancelled && hasValidResponse {
+                    // Response received before cancellation — suppress error
+                } else if isCancelled {
                     infoSection("Error") { row("Status", "Request Cancelled") }
                 } else {
                     infoSection("Error") { row("Domain", err.domain); row("Code", String(err.code)); row("Message", err.localizedDescription) }

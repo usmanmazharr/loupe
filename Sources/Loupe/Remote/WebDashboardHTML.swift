@@ -882,7 +882,9 @@ function renderResponseTree(e) {
       html += '<div class="field-row"><span style="color:'+sc+';font-family:var(--mono);font-weight:600">' + highlightText(String(e.statusCode)) + '</span> ' + highlightText(httpStatusText(e.statusCode)) + '</div>';
     }
     if (e.error) {
-      if (e.error.domain === 'NSURLErrorDomain' && e.error.code === -999) {
+      const isCancelled = e.error.domain === 'NSURLErrorDomain' && e.error.code === -999;
+      if (isCancelled && e.statusCode) { /* suppress — response was received */ }
+      else if (isCancelled) {
         html += '<div class="field-row"><span style="color:var(--warning);font-weight:600">Request Cancelled</span></div>';
       } else {
         html += '<div class="field-row"><span style="color:var(--danger);font-weight:600">' + escapeHTML(e.error.localizedDescription || e.error.domain + ' ' + e.error.code) + '</span></div>';
@@ -909,7 +911,9 @@ function renderOverview(e) {
   html += kvRow('Duration', fmtDuration(e.timing));
   html += kvRow('Response Size', fmtBytes(e.responseSize));
   if (e.error) {
-    if (e.error.domain === 'NSURLErrorDomain' && e.error.code === -999) { html += kvRow('Error', 'Request Cancelled'); }
+    const isCancelled = e.error.domain === 'NSURLErrorDomain' && e.error.code === -999;
+    if (isCancelled && e.statusCode) { /* response received before cancel — suppress */ }
+    else if (isCancelled) { html += kvRow('Error', 'Request Cancelled'); }
     else { html += kvRow('Error', e.error.localizedDescription); }
   }
   html += '</table></div>';
