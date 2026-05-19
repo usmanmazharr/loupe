@@ -455,23 +455,48 @@ document.getElementById('detailSearchInput').addEventListener('input', (e) => {
   detailSearchDebounce = setTimeout(() => {
     detailSearch = val;
     currentMatchSectionIdx = 0;
+    // Expand all sections so marks are visible
+    collapsedSections.delete('request');
+    collapsedSections.delete('response');
     renderDetail();
+    // Auto-scroll to first match
+    requestAnimationFrame(() => {
+      const marks = document.querySelectorAll('#detailBody mark');
+      if (marks.length > 0) {
+        highlightActiveMark(marks[0]);
+        marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
   }, 200);
 });
 document.getElementById('searchPrev').addEventListener('click', () => {
-  const marks = document.querySelectorAll('#detailBody mark');
-  if (!marks.length) return;
-  currentMatchSectionIdx = (currentMatchSectionIdx - 1 + marks.length) % marks.length;
-  updateMatchBadge();
-  scrollToMark(marks[currentMatchSectionIdx]);
+  navigateDetailMatch(-1);
 });
 document.getElementById('searchNext').addEventListener('click', () => {
+  navigateDetailMatch(1);
+});
+
+function navigateDetailMatch(delta) {
+  // Ensure both sections are expanded so all marks are in the DOM
+  let needsRerender = false;
+  if (collapsedSections.has('request')) { collapsedSections.delete('request'); needsRerender = true; }
+  if (collapsedSections.has('response')) { collapsedSections.delete('response'); needsRerender = true; }
+  if (needsRerender) { renderDetail(); }
+
   const marks = document.querySelectorAll('#detailBody mark');
   if (!marks.length) return;
-  currentMatchSectionIdx = (currentMatchSectionIdx + 1) % marks.length;
+  currentMatchSectionIdx = (currentMatchSectionIdx + delta + marks.length) % marks.length;
   updateMatchBadge();
-  scrollToMark(marks[currentMatchSectionIdx]);
-});
+
+  const target = marks[currentMatchSectionIdx];
+  if (target) {
+    highlightActiveMark(target);
+    // Use requestAnimationFrame to ensure layout is settled before scrolling
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+}
 
 function getMatchingSections() {
   if (!selectedEntry || !detailSearch) return [];
@@ -496,24 +521,10 @@ function sectionMatchCount(id, e) {
 
 function scrollToMark(mark) {
   if (!mark) return;
-  const section = mark.closest('.tree-section');
-  if (section) {
-    const sid = section.dataset.section;
-    if (collapsedSections.has(sid)) {
-      collapsedSections.delete(sid);
-      renderDetail();
-      setTimeout(() => {
-        const marks = document.querySelectorAll('#detailBody mark');
-        if (marks[currentMatchSectionIdx]) {
-          highlightActiveMark(marks[currentMatchSectionIdx]);
-          marks[currentMatchSectionIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 50);
-      return;
-    }
-  }
   highlightActiveMark(mark);
-  mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  requestAnimationFrame(() => {
+    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 function highlightActiveMark(mark) {

@@ -81,10 +81,20 @@ struct MacRequestDetailView: View {
         guard !anchors.isEmpty else { return }
         currentMatchIndex = (currentMatchIndex + delta + anchors.count) % anchors.count
         let target = anchors[currentMatchIndex]
+
+        let needsExpand = !requestExpanded || !responseExpanded
         if !requestExpanded { requestExpanded = true }
         if !responseExpanded { responseExpanded = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(target, anchor: .center) }
+
+        let delay: Double = needsExpand ? 0.4 : 0.15
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
+            // Second attempt for deeply nested nodes that may not have laid out yet
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                proxy.scrollTo(target, anchor: .center)
+            }
         }
     }
 
