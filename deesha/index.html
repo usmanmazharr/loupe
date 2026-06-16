@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Deesha 💕</title>
+<style>
+  :root {
+    --pink: #ff5da2;
+    --pink-dark: #e0408a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #ffafbd, #ffc3a0, #ff9a9e);
+    background-size: 400% 400%;
+    animation: gradientShift 12s ease infinite;
+  }
+
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .heart {
+    position: fixed;
+    top: -10vh;
+    font-size: 1.6rem;
+    opacity: 0.85;
+    animation: fall linear infinite;
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+  }
+
+  @keyframes fall {
+    to { transform: translateY(120vh) rotate(360deg); }
+  }
+
+  .card {
+    position: relative;
+    z-index: 2;
+    max-width: 480px;
+    margin: 8vh auto 0;
+    padding: 36px 28px 48px;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 24px;
+    box-shadow: 0 20px 50px rgba(224, 64, 138, 0.35);
+    text-align: center;
+}
+
+  h1 {
+    color: var(--pink-dark);
+    font-size: 1.7rem;
+    margin: 0 0 6px;
+  }
+
+  p.subtitle {
+    color: #b85575;
+    font-size: 1rem;
+    margin: 0 0 28px;
+  }
+
+  .buttons {
+    position: relative;
+    height: 90px;
+  }
+
+  button {
+    border: none;
+    border-radius: 14px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 14px 30px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  #yesBtn {
+    background: var(--pink);
+    color: white;
+    box-shadow: 0 8px 18px rgba(255, 93, 162, 0.5);
+  }
+
+  #yesBtn:hover { transform: scale(1.06); }
+
+  #noBtn {
+    background: #f0f0f0;
+    color: #555;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(20px);
+  }
+
+  .yes-wrap {
+    display: inline-block;
+  }
+
+  #caption {
+    margin-top: 18px;
+    min-height: 24px;
+    color: var(--pink-dark);
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  /* Yes screen */
+  .yes-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: radial-gradient(circle at center, #ffd6e8, #ff8fb8 70%);
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .yes-screen.show {
+    display: flex;
+  }
+
+  .kiss {
+    font-size: 6rem;
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.18) rotate(-4deg); }
+  }
+
+  .yes-screen h2 {
+    color: #c2185b;
+    font-size: 1.9rem;
+    margin: 10px 0 4px;
+  }
+
+  .yes-screen p {
+    color: #91245a;
+    font-size: 1.05rem;
+    max-width: 420px;
+  }
+
+  .confetti {
+    position: absolute;
+    top: -5vh;
+    font-size: 1.4rem;
+    animation: fall linear infinite;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Hey Deesha 💖</h1>
+  <p class="subtitle">I have something to ask you...</p>
+  <h1 style="font-size:1.4rem; margin-bottom: 28px;">Will you be my girlfriend?</h1>
+
+  <div class="buttons">
+    <button id="yesBtn" onclick="sayYes()">Yes 💕</button>
+    <button id="noBtn">No</button>
+  </div>
+
+  <div id="caption"></div>
+</div>
+
+<div class="yes-screen" id="yesScreen">
+  <div class="kiss">😘</div>
+  <h2>Yayyy! She said YES! 🎉</h2>
+  <p>I knew you'd say yes 💕 Consider that a kiss, sent straight from me to you. Can't wait to see you 😚💋</p>
+</div>
+
+<script>
+  // Floating hearts background
+  const heartEmojis = ['💖', '💕', '💗', '💓', '❤️'];
+  for (let i = 0; i < 18; i++) {
+    const h = document.createElement('div');
+    h.className = 'heart';
+    h.textContent = heartEmojis[Math.floor(Math.random() * heartEmojis.length)];
+    h.style.left = Math.random() * 100 + 'vw';
+    h.style.animationDuration = 6 + Math.random() * 8 + 's';
+    h.style.animationDelay = Math.random() * 6 + 's';
+    h.style.fontSize = (1 + Math.random() * 1.4) + 'rem';
+    document.body.appendChild(h);
+  }
+
+  const noBtn = document.getElementById('noBtn');
+  const yesBtn = document.getElementById('yesBtn');
+  const buttonsWrap = document.querySelector('.buttons');
+  const caption = document.getElementById('caption');
+
+  const captions = [
+    "Nice try 😏",
+    "Nope, not that one!",
+    "Catch me if you can 😜",
+    "Are you sure...?",
+    "C'mon, just say yes 💕",
+    "The 'No' button is shy",
+    "Almost had it!",
+    "It's playing hard to get",
+    "Yes is right there though 👉",
+    "Persistent, I like it 😘"
+  ];
+  let attempts = 0;
+
+  function moveNoButton() {
+    attempts++;
+    caption.textContent = captions[Math.min(attempts - 1, captions.length - 1)];
+
+    const wrapRect = buttonsWrap.getBoundingClientRect();
+    const btnW = noBtn.offsetWidth;
+    const btnH = noBtn.offsetHeight;
+
+    // Keep the dodge within the viewport, with a little padding
+    const maxX = window.innerWidth - btnW - 16;
+    const maxY = window.innerHeight - btnH - 16;
+
+    const newX = Math.max(16, Math.random() * maxX);
+    const newY = Math.max(16, Math.random() * maxY);
+
+    noBtn.style.position = 'fixed';
+    noBtn.style.left = newX + 'px';
+    noBtn.style.top = newY + 'px';
+    noBtn.style.transform = 'none';
+
+    // Make Yes a little more inviting each time
+    const scale = Math.min(1 + attempts * 0.05, 1.6);
+    yesBtn.style.transform = `scale(${scale})`;
+  }
+
+  // Desktop: dodge before the click can even register
+  noBtn.addEventListener('mouseenter', moveNoButton);
+  noBtn.addEventListener('mousedown', (e) => { e.preventDefault(); moveNoButton(); });
+
+  // Mobile: dodge on touch, prevent the tap from registering as a click
+  noBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    moveNoButton();
+  }, { passive: false });
+
+  // Safety net: if it's ever somehow clicked, just dodge instead of doing anything
+  noBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    moveNoButton();
+  });
+
+  window.addEventListener('resize', () => {
+    if (noBtn.style.position === 'fixed') moveNoButton();
+  });
+
+  function sayYes() {
+    document.getElementById('yesScreen').classList.add('show');
+    const confettiEmojis = ['💕', '🎉', '💖', '😘', '✨'];
+    for (let i = 0; i < 30; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.textContent = confettiEmojis[Math.floor(Math.random() * confettiEmojis.length)];
+      c.style.left = Math.random() * 100 + 'vw';
+      c.style.animationDuration = 3 + Math.random() * 4 + 's';
+      c.style.animationDelay = Math.random() * 2 + 's';
+      c.style.fontSize = (1 + Math.random() * 1.2) + 'rem';
+      document.getElementById('yesScreen').appendChild(c);
+    }
+  }
+</script>
+
+</body>
+</html>
